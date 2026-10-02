@@ -3,8 +3,8 @@
 //   IFC を組むのは tools/sheet_to_ifc.py（Pyodide で動かす。中身を作り直さない）
 //   保存 = TSV（前の版は _履歴 へ）・IFC・CSV をフォルダへ書く
 //   Web 版（projects.json があるとき）は見るだけで開き、パスワードで編集 → GitHub へコミット（web.js）
-import { Viewer } from "./viewer.js?v=20261002174120";
-import * as web from "./web.js?v=20261002174120";
+import { Viewer } from "./viewer.js?v=20261002180053";
+import * as web from "./web.js?v=20261002180053";
 
 const $ = (id) => document.getElementById(id);
 const IFC_NAME = "repairmodel.ifc";
@@ -287,7 +287,7 @@ async function openText(text, name) {
   setDirty(false);
   $("docName").textContent = (dirHandle ? dirHandle.name + " / " : "") + name;
   for (const id of ["btnSave", "btnCsv", "btnIfc"]) $(id).disabled = false;
-  $("btnSave").textContent = dirHandle ? "保存" : "保存（ダウンロード）";
+  $("btnSave").textContent = dirHandle || site ? "保存" : "保存（ダウンロード）";
   $("empty").hidden = true;
   buildFilters();
   buildTable();
@@ -668,6 +668,34 @@ async function save() {
 $("btnSave").onclick = save;
 $("btnCsv").onclick = () => download(stem() + ".csv", eng.csv(), "text/csv");
 $("btnIfc").onclick = () => download(IFC_NAME, uploadIfc().ifc, "application/octet-stream");
+
+// ------------------------------------------------------------ 左右の幅（つまみをドラッグ。覚えておく）
+
+const LEFTW_KEY = "repairstage.leftw";
+function setLeftWidth(px) {
+  const main = document.querySelector("main");
+  if (px == null) { main.style.removeProperty("--leftw"); return; }
+  const w = Math.max(240, Math.min(px, main.clientWidth - 240));
+  main.style.setProperty("--leftw", w + "px");
+}
+try { const v = Number(localStorage.getItem(LEFTW_KEY)); if (v > 0) setLeftWidth(v); } catch { /* 覚えられなくても動く */ }
+$("split").addEventListener("pointerdown", (e) => {
+  const sp = $("split"), main = document.querySelector("main");
+  sp.setPointerCapture(e.pointerId);
+  sp.classList.add("drag");
+  document.body.classList.add("dragging");
+  const left = main.getBoundingClientRect().left;
+  const move = (ev) => setLeftWidth(ev.clientX - left);
+  const up = () => {
+    sp.removeEventListener("pointermove", move);
+    sp.classList.remove("drag");
+    document.body.classList.remove("dragging");
+    try { localStorage.setItem(LEFTW_KEY, String($("left").getBoundingClientRect().width)); } catch { /* 同上 */ }
+  };
+  sp.addEventListener("pointermove", move);
+  sp.addEventListener("pointerup", up, { once: true });
+});
+$("split").ondblclick = () => { setLeftWidth(null); try { localStorage.removeItem(LEFTW_KEY); } catch { /* 同上 */ } };
 
 // 試験用（開発者ツールから。保存はダウンロードになる）
 window.__viewer = viewer;

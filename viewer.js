@@ -19,6 +19,8 @@ export class Viewer {
     this.camera.position.set(30, 30, 30);
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
+    // 回転は自前（指・マウスを置いた所の物を中心に回す）。OrbitControls は移動とズームだけ
+    this.controls.enableRotate = false;
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 2.2));
     const sun = new THREE.DirectionalLight(0xffffff, 1.2);
     sun.position.set(1, 2, 1.5);
@@ -39,6 +41,7 @@ export class Viewer {
     new ResizeObserver(() => this.resize()).observe(el);
     this.resize();
     this.bindPick();
+    this.bindOrbit();
     const loop = () => { this.controls.update(); this.renderer.render(this.scene, this.camera); requestAnimationFrame(loop); };
     loop();
   }
@@ -46,8 +49,8 @@ export class Viewer {
   // ★canvas の大きさは CSS（100%）に任せ、描く解像度だけ合わせる。setSize で style を書くと、
   //   最大化した窓でスクロールバーが出入りして大きさが行ったり来たりした（2026-10-02）
   resize() {
-    const w = this.el.clientWidth || 1, h = this.el.clientHeight || 1;
-    if (w === this.w && h === this.h) return;
+    const w = this.el.clientWidth, h = this.el.clientHeight;
+    if (!w || !h || (w === this.w && h === this.h)) return;   // 隠れている間（0×0）は前の大きさのまま
     this.w = w; this.h = h;
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
@@ -139,7 +142,7 @@ export class Viewer {
         const c = pg.color;
         if (!geos.has(pg.geometryExpressID)) geos.set(pg.geometryExpressID, this.geometry(id, pg.geometryExpressID));
         if (!inst.has(pg.geometryExpressID)) inst.set(pg.geometryExpressID, []);
-        inst.get(pg.geometryExpressID).push({ m: this.placed(pg.flatTransformation), c: [c.x, c.y, c.z] });
+        inst.get(pg.geometryExpressID).push({ m: this.placed(pg.flatTransformation), c: [c.x, c.y, c.z], a: c.w });
       }
     });
     const grp = new THREE.Group();
@@ -152,6 +155,7 @@ export class Viewer {
       count += list.length;
       if (list.length >= 8) {
         const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setRGB(...list[0].c, THREE.SRGBColorSpace), roughness: 0.7 });
+        mat.userData.opaque = list[0].a >= 0.99;
         mats.push(mat);
         const im = new THREE.InstancedMesh(geo, mat, list.length);
         list.forEach((x, k) => im.setMatrixAt(k, x.m));
@@ -161,8 +165,8 @@ export class Viewer {
       }
       const pos = geo.attributes.position.array, nor = geo.attributes.normal.array, ix = geo.index.array;
       for (const x of list) {
-        const key = x.c.map((v) => v.toFixed(3)).join(",");
-        if (!merge.has(key)) merge.set(key, { c: x.c, pos: [], nor: [], idx: [], n: 0 });
+        const key = x.c.map((v) => v.toFixed(3)).join(",") + "|" + (x.a >= 0.99 ? 1 : 0);
+        if (!merge.has(key)) merge.set(key, { c: x.c, opaque: x.a >= 0.99, pos: [], nor: [], idx: [], n: 0 });
         const b = merge.get(key);
         const nm = new THREE.Matrix3().getNormalMatrix(x.m);
         const v = new THREE.Vector3();
@@ -182,6 +186,7 @@ export class Viewer {
       geo.setAttribute("normal", new THREE.Float32BufferAttribute(b.nor, 3));
       geo.setIndex(b.idx);
       const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setRGB(...b.c, THREE.SRGBColorSpace), roughness: 0.85, side: THREE.DoubleSide });
+      mat.userData.opaque = b.opaque;
       mats.push(mat);
       grp.add(new THREE.Mesh(geo, mat));
     }
@@ -213,6 +218,7 @@ export class Viewer {
     for (const g of this.backgrounds) {
       g.visible = a > 0;
       for (const m of g.userData.mats) {
+        if (m.userData.opaque) continue;      // IFC で不透明にしたもの（橋台・橋脚の名前）は濃さを変えない
         m.transparent = a < 1; m.opacity = a; m.depthWrite = a >= 1;
         m.polygonOffset = true; m.polygonOffsetFactor = 1; m.polygonOffsetUnits = 1;
         m.needsUpdate = true;
@@ -301,6 +307,75 @@ export class Viewer {
   focusRows(rowNos) {
     const ms = rowNos.flatMap((r) => this.byRow.get(r) || []);
     if (ms.length) this.frame(this.boxOf(ms));
+  }
+
+  // 置いた所を中心に回す。物に当たればその点、外れたら注視点と同じ奥行きの点
+  pivotAt(clientX, clientY) {
+    const dom = this.renderer.domElement, rect = dom.getBoundingClientRect();
+    const p = new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+    const ray = new THREE.Raycaster();
+    this.camera.updateMatrixWorld();          // 描画が止まっている（裏のタブ）と行列が古いまま
+    ray.setFromCamera(p, this.camera);
+    const targets = this.meshes.filter((m) => m.mesh.visible).map((m) => m.mesh);
+    for (const g of this.backgrounds) if (g.visible) targets.push(...g.children);
+    const hit = ray.intersectObjects(targets, false)[0];
+    if (hit) return hit.point;
+    const fwd = new THREE.Vector3();
+    this.camera.getWorldDirection(fwd);
+    const d = this.controls.target.clone().sub(this.camera.position).dot(fwd);
+    const t = d / Math.max(ray.ray.direction.dot(fwd), 1e-6);
+    return ray.ray.origin.clone().addScaledVector(ray.ray.direction, t);
+  }
+
+  bindOrbit() {
+    const dom = this.renderer.domElement;
+    const pts = new Map();
+    let pivot = null, last = null, moved = false;
+    const marker = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8),
+      new THREE.MeshBasicMaterial({ color: 0xffd400, depthTest: false, transparent: true, opacity: 0.9 }));
+    marker.renderOrder = 20;
+    this.pivotMarker = marker;
+    marker.visible = false;
+    this.scene.add(marker);
+    const up = new THREE.Vector3(0, 1, 0);
+    dom.addEventListener("pointerdown", (e) => {
+      pts.set(e.pointerId, e);
+      // 1 本指・左ボタンのときだけ回す（2 本指は OrbitControls の移動とズーム）
+      if (pts.size !== 1 || (e.pointerType === "mouse" && e.button !== 0)) { pivot = null; marker.visible = false; return; }
+      pivot = null; moved = false;
+      last = [e.clientX, e.clientY];
+      this._down = [e.clientX, e.clientY];
+    });
+    dom.addEventListener("pointermove", (e) => {
+      if (!pts.has(e.pointerId) || pts.size !== 1 || !last) return;
+      const dx = e.clientX - last[0], dy = e.clientY - last[1];
+      if (!moved) {
+        if (Math.hypot(e.clientX - this._down[0], e.clientY - this._down[1]) < 4) return;   // まだクリック
+        moved = true;
+        pivot = this.pivotAt(this._down[0], this._down[1]);
+        marker.position.copy(pivot);
+        marker.scale.setScalar(this.camera.position.distanceTo(pivot) * 0.008);
+        marker.visible = true;
+      }
+      last = [e.clientX, e.clientY];
+      const h = this.renderer.domElement.clientHeight || 1;
+      const yaw = -Math.PI * dx / h, pitch = -Math.PI * dy / h;   // 画面の高さぶん動かして半回転
+      const cam = this.camera.position, tgt = this.controls.target;
+      const right = new THREE.Vector3().subVectors(tgt, cam).cross(up).normalize();
+      const q = new THREE.Quaternion().setFromAxisAngle(up, yaw);
+      // 真上・真下を越えないように（越えると画面が裏返る）
+      const qp = new THREE.Quaternion().setFromAxisAngle(right, pitch);
+      const fwd2 = new THREE.Vector3().subVectors(tgt, cam).normalize().applyQuaternion(qp);
+      if (Math.abs(fwd2.dot(up)) < 0.995) q.multiply(qp);
+      for (const v of [cam, tgt]) v.sub(pivot).applyQuaternion(q).add(pivot);
+      this.camera.lookAt(tgt);
+    });
+    const end = (e) => {
+      pts.delete(e.pointerId);
+      if (pts.size === 0) { last = null; marker.visible = false; }
+    };
+    dom.addEventListener("pointerup", end);
+    dom.addEventListener("pointercancel", end);
   }
 
   bindPick() {

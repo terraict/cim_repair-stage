@@ -30,8 +30,11 @@ button.ghost { background: transparent; }
 select, input[type=search], input[type=date] { border: 1px solid var(--line); background: var(--panel);
   border-radius: 4px; padding: 3px 6px; }
 
-main { flex: 1; display: grid; grid-template-columns: minmax(420px, 55%) 1fr; min-height: 0; }
-#left { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); }
+main { flex: 1; display: grid; grid-template-columns: var(--leftw, 55%) 6px 1fr; min-height: 0; }
+#left { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+#split { cursor: col-resize; background: var(--line); touch-action: none; }
+#split:hover, #split.drag { background: var(--accent); }
+body.dragging { user-select: none; cursor: col-resize; }
 .filters, .bulk { display: flex; gap: 6px; padding: 6px 8px; align-items: center; flex-wrap: wrap;
   border-bottom: 1px solid var(--line); background: var(--panel); }
 .filters input[type=search] { flex: 1; min-width: 12ch; }
@@ -79,7 +82,15 @@ dialog { border: 1px solid var(--line); border-radius: 6px; background: var(--pa
 #findList .E { color: var(--err); }
 #findList .W { color: var(--warn); }
 
-@media (max-width: 800px) {
+/* 3D の欄が狭いとき：操作欄を詰め、凡例はその下へ */
+@media (max-width: 1000px), (max-height: 500px) {
+  .viewbar { font-size: 11px; gap: 4px; padding: 2px 6px; max-width: calc(100% - 16px); flex-wrap: wrap; justify-content: flex-end; }
+  .viewbar input[type=range] { width: 70px; }
+  .legend { top: auto; bottom: 34px; max-height: 35%; }
+}
+/* スマホなど：縦向きは上下に分ける。横向きは左右のまま（つまみで幅を変えられる） */
+@media (orientation: portrait) and (max-width: 900px) {
   main { grid-template-columns: 1fr; grid-template-rows: 55% 45%; }
+  #split { display: none; }
   #left { border-right: 0; border-bottom: 1px solid var(--line); }
 }
