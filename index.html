@@ -4,7 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>施工段階</title>
-<link rel="stylesheet" href="style.css">
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
@@ -15,97 +14,16 @@
 <script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
 </head>
 <body>
-<header>
-  <strong class="title">施工段階</strong>
-  <button id="btnOpen" class="primary">フォルダを開く</button>
-  <button id="btnOpenFile" title="フォルダを開けないブラウザのとき">ファイルを開く</button>
-  <input id="fileInput" type="file" accept=".tsv,.txt" hidden>
-  <span id="docName" class="doc"></span>
-  <span id="dirty" class="dirty" hidden>未保存</span>
-  <span id="mode" class="badge" hidden></span>
-  <span class="grow"></span>
-  <button id="btnFindings" class="ghost" hidden></button>
-  <button id="btnEdit" hidden title="パスワードを入れると日付を変えて保存できる">編集する</button>
-  <button id="btnSave" class="primary" disabled title="TSV・IFC・CSV をフォルダへ書く（Ctrl+S）">保存</button>
-  <button id="btnCsv" disabled>CSV</button>
-  <button id="btnIfc" disabled>IFC</button>
-</header>
-
-<main>
-  <section id="left">
-    <div class="filters">
-      <input id="q" type="search" placeholder="名称・メモで絞る">
-      <select id="fType"><option value="">タイプ：すべて</option></select>
-      <select id="fStage"><option value="">段階：すべて</option></select>
-    </div>
-    <div id="bulk" class="bulk" hidden>
-      <span id="selCount"></span>
-      <button id="btnNext" class="primary" title="選んだ行それぞれの次の空いた STEP に日付を入れる">次の段階へ</button>
-      <select id="bStep"></select>
-      <input id="bDate" type="date">
-      <button id="btnSet">入れる</button>
-      <button id="btnClear">消す</button>
-      <button id="btnUnsel" class="ghost">選択を外す</button>
-    </div>
-    <div id="tableWrap">
-      <table id="tbl">
-        <thead><tr id="thead"></tr></thead>
-        <tbody id="tbody"></tbody>
-      </table>
-      <div id="empty" class="empty">
-        <p><b>フォルダを開く</b>で、案件の TSV（施工段階の正のファイル）が入ったフォルダを選びます。</p>
-        <p>エクセルから移すときは <code>py tools\sheet_to_ifc.py 入力シート.xlsm --to-tsv 案件.tsv</code></p>
-      </div>
-    </div>
-  </section>
-  <div id="split" title="ドラッグで左右の幅を変える（ダブルクリックで元に戻す）"></div>
-  <section id="right">
-    <div id="view"></div>
-    <div class="viewbar">
-      <label><input id="ghost" type="checkbox" checked> 出ない行も薄く表示</label>
-      <label id="bgCtl" hidden title="フォルダにある補修以外の IFC（橋梁モデル）の濃さ。左端で消える">橋梁 <input id="bgOpacity" type="range" min="0" max="1" step="0.05" value="0.4"></label>
-      <button id="btnFit" class="ghost">全体</button>
-    </div>
-    <details class="legend"><summary>凡例</summary><div id="legend"></div></details>
-    <div id="status" class="status">準備中…</div>
-  </section>
-</main>
-
-<dialog id="dlgFindings">
-  <h3>検査の結果</h3>
-  <div id="findList"></div>
-  <form method="dialog"><button>閉じる</button></form>
-</dialog>
-<dialog id="dlgPick">
-  <h3>どのファイルを開きますか</h3>
-  <div id="pickList"></div>
-  <form method="dialog"><button>やめる</button></form>
-</dialog>
-
-<dialog id="dlgLogin">
-  <h3>編集する</h3>
-  <p>編集用のパスワードを入れてください。</p>
-  <form id="fmLogin">
-    <input id="pw" type="password" autocomplete="current-password" placeholder="パスワード" required>
-    <button class="primary">開く</button>
-    <button type="button" id="btnLoginCancel">やめる</button>
-  </form>
-  <p id="loginMsg" class="msg"></p>
-  <p class="small"><a href="#" id="lnkSetup">編集の設定（パスワードを決める・変える）</a></p>
-</dialog>
-<dialog id="dlgSetup">
-  <h3>編集の設定</h3>
-  <p class="small">GitHub で、このリポジトリだけに「Contents：読み書き」を許した fine-grained token を作り、下に貼ってください。
-    トークンはパスワードで暗号化してリポジトリへ置きます（トークンそのものは残りません）。パスワードは <b>12 文字以上</b>にしてください。</p>
-  <form id="fmSetup">
-    <label>トークン <input id="stToken" type="password" autocomplete="off" required></label>
-    <label>パスワード <input id="stPw1" type="password" autocomplete="new-password" minlength="12" required></label>
-    <label>もう一度 <input id="stPw2" type="password" autocomplete="new-password" minlength="12" required></label>
-    <div><button class="primary">設定する</button> <button type="button" id="btnSetupCancel">やめる</button></div>
-  </form>
-  <p id="setupMsg" class="msg"></p>
-</dialog>
-
-<script type="module" src="app.js?v=20261002180053"></script>
+<p id="boot" style="padding:16px;font:14px sans-serif">読み込み中…</p>
+<script type="module">
+// ★骨組み（body.html）・見た目・プログラムを、毎回 version.json の同じ版でそろえて読む。
+//   Pages は index.html を 10 分覚えるので、骨組みだけ古いまま新しい app.js が走って止まった（2026-10-02 Chrome）
+const v = (await (await fetch("version.json?t=" + Date.now(), { cache: "no-store" })).json()).v;
+const css = document.createElement("link");
+css.rel = "stylesheet"; css.href = "style.css?v=" + v;
+document.head.appendChild(css);
+document.body.innerHTML = await (await fetch("body.html?v=" + v, { cache: "no-store" })).text();
+await import("./app.js?v=" + v);
+</script>
 </body>
 </html>
