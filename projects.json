@@ -1,0 +1,17 @@
+{
+ "repo": {
+  "owner": "tetsueci",
+  "repo": "ict_repair-stage",
+  "branch": "main"
+ },
+ "projects": [
+  {
+   "id": "shinasahi",
+   "name": "新旭橋",
+   "tsv": "projects/shinasahi/data.tsv",
+   "bridge": [
+    "projects/shinasahi/bridge.ifc"
+   ]
+  }
+ ]
+}
