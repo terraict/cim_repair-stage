@@ -12,7 +12,7 @@
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }   /* display:flex の帯が hidden でも出ていた */
-html, body { height: 100%; margin: 0; }
+html, body { height: 100%; margin: 0; overflow: hidden; }   /* ページ全体はスクロールさせない（スクロールバーの出入りで 3D が揺れた） */
 body { background: var(--bg); color: var(--text); font: 13px/1.4 "Yu Gothic UI", "Meiryo", sans-serif;
   display: flex; flex-direction: column; }
 header { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: var(--panel);
@@ -54,7 +54,8 @@ td.hole input { outline: 2px solid var(--warn); }
 .empty code { background: var(--panel); padding: 1px 4px; border-radius: 3px; }
 
 #right { position: relative; min-height: 0; background: var(--view); }
-#view { position: absolute; inset: 0; }
+#view { position: absolute; inset: 0; overflow: hidden; }
+#view canvas { display: block; width: 100%; height: 100%; }
 .viewbar { position: absolute; top: 8px; right: 8px; display: flex; gap: 8px; align-items: center;
   color: #e4e8ec; background: rgba(0,0,0,.45); padding: 4px 8px; border-radius: 4px; }
 .viewbar button { color: #e4e8ec; border-color: #556; }

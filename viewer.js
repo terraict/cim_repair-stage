@@ -43,9 +43,13 @@ export class Viewer {
     loop();
   }
 
+  // ★canvas の大きさは CSS（100%）に任せ、描く解像度だけ合わせる。setSize で style を書くと、
+  //   最大化した窓でスクロールバーが出入りして大きさが行ったり来たりした（2026-10-02）
   resize() {
     const w = this.el.clientWidth || 1, h = this.el.clientHeight || 1;
-    this.renderer.setSize(w, h);
+    if (w === this.w && h === this.h) return;
+    this.w = w; this.h = h;
+    this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
   }
