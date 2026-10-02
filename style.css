@@ -32,6 +32,13 @@ select, input[type=search], input[type=date] { border: 1px solid var(--line); ba
 
 main { flex: 1; display: grid; grid-template-columns: var(--leftw, 55%) 6px 1fr; min-height: 0; }
 #left { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+/* 表を隠す（3D を広く使う）。縦横どちらでも 3D だけになる */
+body.noTable main { grid-template-columns: 1fr !important; grid-template-rows: 1fr !important; }
+body.noTable #left, body.noTable #split { display: none !important; }
+#btnTable.on { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.attrib { position: absolute; right: 8px; bottom: 8px; font-size: 11px; color: #222; background: rgba(255,255,255,.75); padding: 1px 6px; border-radius: 3px; }
+.attrib a { color: inherit; }
+.viewbar select { font-size: inherit; padding: 1px 4px; background: rgba(0,0,0,.3); color: #e4e8ec; border-color: #556; }
 #split { cursor: col-resize; background: var(--line); touch-action: none; }
 #split:hover, #split.drag { background: var(--accent); }
 body.dragging { user-select: none; cursor: col-resize; }
@@ -67,7 +74,7 @@ td.hole input { outline: 2px solid var(--warn); }
 .legend summary { cursor: pointer; }
 .legend div div { white-space: nowrap; }
 .legend .chip { display: inline-block; width: 10px; height: 10px; margin-right: 4px; border-radius: 2px; }
-.status { position: absolute; left: 8px; bottom: 8px; right: 8px; color: #cfd6dc; font-size: 12px;
+.status { position: absolute; left: 8px; bottom: 26px; right: 8px; color: #cfd6dc; font-size: 12px;
   text-shadow: 0 1px 2px #000; pointer-events: none; }
 
 .badge { font-size: 12px; padding: 1px 8px; border-radius: 10px; background: var(--line); color: var(--muted); }
@@ -86,7 +93,7 @@ dialog { border: 1px solid var(--line); border-radius: 6px; background: var(--pa
 @media (max-width: 1000px), (max-height: 500px) {
   .viewbar { font-size: 11px; gap: 4px; padding: 2px 6px; max-width: calc(100% - 16px); flex-wrap: wrap; justify-content: flex-end; }
   .viewbar input[type=range] { width: 70px; }
-  .legend { top: auto; bottom: 34px; max-height: 35%; }
+  .legend { top: 80px; max-height: 35%; }
 }
 /* スマホなど：縦向きは上下に分ける。横向きは左右のまま（つまみで幅を変えられる） */
 @media (orientation: portrait) and (max-width: 900px) {

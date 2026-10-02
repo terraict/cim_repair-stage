@@ -200,7 +200,53 @@ export class Viewer {
   // 別の案件を開くとき。原点も決め直す
   reset() {
     this.clearBackgrounds();
+    this.clearPhoto();
     this.origin = null;
+  }
+
+  // モデル（IFC）の座標 → three の座標（web-ifc は Z 上を Y 上に直す：(x, y, z) → (x, z, −y)。そこから原点を引く）
+  modelToThree(x, y, z) {
+    const o = this.origin || new THREE.Vector3();
+    return new THREE.Vector3(x - o.x, z - o.y, -y - o.z);
+  }
+
+  // 航空写真のタイルを敷く。tiles: [{ url, corners:[[x,y]×4]（左上・右上・右下・左下、モデル座標）}]、z: 置く高さ（モデル座標）
+  setPhoto(tiles, z) {
+    this.clearPhoto();
+    const grp = new THREE.Group();
+    const loader = new THREE.TextureLoader();
+    loader.setCrossOrigin("anonymous");
+    for (const t of tiles) {
+      const p = t.corners.map(([x, y]) => this.modelToThree(x, y, z));
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.Float32BufferAttribute(p.flatMap((v) => [v.x, v.y, v.z]), 3));
+      geo.setAttribute("uv", new THREE.Float32BufferAttribute([0, 1, 1, 1, 1, 0, 0, 0], 2));
+      geo.setIndex([0, 3, 1, 1, 3, 2]);
+      const mat = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, color: 0x888888 });
+      loader.load(t.url, (tex) => { tex.colorSpace = THREE.SRGBColorSpace; mat.map = tex; mat.color.set(0xffffff); mat.needsUpdate = true; },
+        undefined, () => { /* 海の上などタイルが無い所は灰色のまま */ });
+      const m = new THREE.Mesh(geo, mat);
+      m.renderOrder = -1;
+      grp.add(m);
+    }
+    this.photo = grp;
+    this.scene.add(grp);
+    this.setBackgroundMode(this.bgMode || "grad");
+  }
+
+  clearPhoto() {
+    if (!this.photo) return;
+    this.photo.traverse((o) => { o.geometry?.dispose(); o.material?.map?.dispose(); o.material?.dispose(); });
+    this.scene.remove(this.photo);
+    this.photo = null;
+  }
+
+  // 背景：grad（既定の暗い色）/ black / white / photo（航空写真。写真が無ければ grad）
+  setBackgroundMode(mode) {
+    this.bgMode = mode;
+    const col = { grad: 0x20262d, black: 0x000000, white: 0xf2f4f6, photo: 0xbfd3e6 }[mode] ?? 0x20262d;
+    this.scene.background = new THREE.Color(col);
+    if (this.photo) this.photo.visible = mode === "photo";
   }
 
   clearBackgrounds() {
@@ -293,12 +339,16 @@ export class Viewer {
     if (side) dir.set(size.x >= size.z ? 0 : 1, 0.7, size.x >= size.z ? 1 : 0).normalize();
     if (!isFinite(dir.x) || dir.lengthSq() === 0) dir.set(1, 1, 1).normalize();
     this.controls.target.copy(c);
-    this.camera.position.copy(c).addScaledVector(dir, r * 2.8);
+    // 縦長の画面（スマホの縦向き）でも横に収まるよう、狭いほうの画角で距離を決める
+    const vf = THREE.MathUtils.degToRad(this.camera.fov);
+    const hf = 2 * Math.atan(Math.tan(vf / 2) * this.camera.aspect);
+    this.camera.position.copy(c).addScaledVector(dir, r / Math.sin(Math.min(vf, hf) / 2) * 1.05);
     this.camera.near = r / 200; this.camera.far = r * 200;
     this.camera.updateProjectionMatrix();
   }
 
   fit() {
+    this.resize();                     // 開いた直後は画面の縦横比がまだ前のまま
     const box = this.boxOf(this.meshes.map((m) => m.mesh));
     for (const g of this.backgrounds) if (g.visible) box.union(new THREE.Box3().setFromObject(g));
     this.frame(box, true);
@@ -318,6 +368,7 @@ export class Viewer {
     ray.setFromCamera(p, this.camera);
     const targets = this.meshes.filter((m) => m.mesh.visible).map((m) => m.mesh);
     for (const g of this.backgrounds) if (g.visible) targets.push(...g.children);
+    if (this.photo?.visible) targets.push(...this.photo.children);
     const hit = ray.intersectObjects(targets, false)[0];
     if (hit) return hit.point;
     const fwd = new THREE.Vector3();

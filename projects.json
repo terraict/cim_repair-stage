@@ -11,7 +11,8 @@
    "tsv": "projects/shinasahi/data.tsv",
    "bridge": [
     "projects/shinasahi/bridge.ifc"
-   ]
+   ],
+   "geo": "projects/shinasahi/geo.json"
   }
  ]
 }

@@ -3,8 +3,9 @@
 //   IFC を組むのは tools/sheet_to_ifc.py（Pyodide で動かす。中身を作り直さない）
 //   保存 = TSV（前の版は _履歴 へ）・IFC・CSV をフォルダへ書く
 //   Web 版（projects.json があるとき）は見るだけで開き、パスワードで編集 → GitHub へコミット（web.js）
-import { Viewer } from "./viewer.js?v=20261002180756";
-import * as web from "./web.js?v=20261002180756";
+import { Viewer } from "./viewer.js?v=20261002184640";
+import * as web from "./web.js?v=20261002184640";
+import * as geo from "./geo.js?v=20261002184640";
 
 const $ = (id) => document.getElementById(id);
 const IFC_NAME = "repairmodel.ifc";
@@ -72,6 +73,10 @@ async function startSite() {
   status("データを読み込み中…");
   await openText(await web.fetchText(p.tsv), p.name + ".tsv");
   $("docName").textContent = p.name;
+  if (p.geo) {
+    try { await setGeo(JSON.parse(await web.fetchText(p.geo))); }
+    catch (e) { console.warn("geo", e); }
+  }
 }
 
 function setEditable(on) {
@@ -467,6 +472,7 @@ function toggleRow(rowNo, range, additive) {
 }
 
 function pickRows(rowNos, additive) {
+  pickedNote(rowNos);
   if (!additive) selected.clear();
   for (const n of rowNos) additive && selected.has(n) ? selected.delete(n) : selected.add(n);
   if (rowNos.length) anchorRow = rowNos[0];
@@ -668,6 +674,56 @@ async function save() {
 $("btnSave").onclick = save;
 $("btnCsv").onclick = () => download(stem() + ".csv", eng.csv(), "text/csv");
 $("btnIfc").onclick = () => download(IFC_NAME, uploadIfc().ifc, "application/octet-stream");
+
+// ------------------------------------------------------------ 背景（航空写真）
+
+const BG_KEY = "repairstage.bg";
+let geoInfo = null;
+
+// geo.json があれば、モデルの x 範囲の中央から 500 m 四方の写真を敷く
+async function setGeo(g) {
+  geoInfo = g;
+  // 中心はモデル（補修）の x 範囲の中央。three の x はモデルの x から原点を引いたもの
+  const box = viewer.boxOf(viewer.meshes.map((m) => m.mesh));
+  const xmid = box.isEmpty() ? 140 : (box.min.x + box.max.x) / 2 + (viewer.origin ? viewer.origin.x : 0);
+  const tiles = geo.tilesAround(g, xmid, 500, 18);
+  viewer.setPhoto(tiles, g.ground - g.z0);
+  $("bgMode").querySelector('option[value="photo"]').disabled = false;
+  let mode = "photo";
+  try { mode = localStorage.getItem(BG_KEY) || "photo"; } catch { /* 既定 */ }
+  applyBg(mode);
+}
+
+function applyBg(mode) {
+  if (mode === "photo" && !geoInfo) mode = "grad";
+  $("bgMode").value = mode;
+  viewer.setBackgroundMode(mode);
+  $("attrib").hidden = mode !== "photo";
+}
+$("bgMode").querySelector('option[value="photo"]').disabled = true;
+$("bgMode").onchange = () => {
+  applyBg($("bgMode").value);
+  try { localStorage.setItem(BG_KEY, $("bgMode").value); } catch { /* 覚えられなくても動く */ }
+};
+
+// ------------------------------------------------------------ 表を出す・隠す（スマホで 3D を広く使う）
+
+const TABLE_KEY = "repairstage.notable";
+function setTable(show) {
+  document.body.classList.toggle("noTable", !show);
+  $("btnTable").classList.toggle("on", show);
+  $("btnTable").textContent = show ? "表" : "表を出す";
+  try { localStorage.setItem(TABLE_KEY, show ? "0" : "1"); } catch { /* 同上 */ }
+}
+$("btnTable").onclick = () => setTable(document.body.classList.contains("noTable"));
+try { setTable(localStorage.getItem(TABLE_KEY) !== "1"); } catch { setTable(true); }
+
+// 3D で選んだとき、表が隠れていれば何を選んだかを下に出す
+function pickedNote(rowNos) {
+  if (!document.body.classList.contains("noTable") || !rowNos.length) return;
+  const r = rowsByNo.get(rowNos[0]);
+  if (r) status(`${r.row} 行：${r.name}（${r.type}・${r.stage}）${r.steps.filter(Boolean).length ? "　" + r.steps.filter(Boolean).join(" → ") : ""}`);
+}
 
 // ------------------------------------------------------------ 左右の幅（つまみをドラッグ。覚えておく）
 
