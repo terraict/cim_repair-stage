@@ -36,6 +36,19 @@ main { flex: 1; display: grid; grid-template-columns: var(--leftw, 55%) 6px 1fr;
 body.noTable main { grid-template-columns: 1fr !important; grid-template-rows: 1fr !important; }
 body.noTable #left, body.noTable #split { display: none !important; }
 #btnTable.on { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.detail { position: absolute; left: 8px; bottom: 50px; width: min(340px, calc(100% - 16px)); max-height: 55%; overflow: auto;
+  background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px;
+  font-size: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.35); z-index: 2; }
+.detail h4 { margin: 0 24px 4px 0; font-size: 13px; }
+.detail .x { position: absolute; right: 6px; top: 4px; border: 0; background: transparent; font-size: 16px; padding: 0 4px; }
+.detail dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px 8px; margin: 6px 0 0; }
+.detail dt { color: var(--muted); }
+.detail dd { margin: 0; word-break: break-all; }
+.detail dd input { width: 100%; border: 1px solid var(--line); border-radius: 3px; padding: 1px 4px; background: var(--panel); }
+.detail .sec { margin-top: 6px; font-weight: 600; }
+.detail .addMemo { margin-top: 6px; }
+.memoBulk { display: inline-flex; gap: 4px; align-items: center; }
+.memoBulk input { width: 14ch; border: 1px solid var(--line); border-radius: 4px; padding: 3px 6px; background: var(--panel); }
 .attrib { position: absolute; right: 8px; bottom: 8px; font-size: 11px; color: #222; background: rgba(255,255,255,.75); padding: 1px 6px; border-radius: 3px; }
 .attrib a { color: inherit; }
 .viewbar select { font-size: inherit; padding: 1px 4px; background: rgba(0,0,0,.3); color: #e4e8ec; border-color: #556; }
@@ -90,7 +103,8 @@ dialog { border: 1px solid var(--line); border-radius: 6px; background: var(--pa
 #findList .W { color: var(--warn); }
 
 /* 3D の欄が狭いとき：操作欄を詰め、凡例はその下へ */
-@media (max-width: 1000px), (max-height: 500px) {
+#right { container-type: size; }
+@container (max-width: 560px) {
   .viewbar { font-size: 11px; gap: 4px; padding: 2px 6px; max-width: calc(100% - 16px); flex-wrap: wrap; justify-content: flex-end; }
   .viewbar input[type=range] { width: 70px; }
   .legend { top: 80px; max-height: 35%; }

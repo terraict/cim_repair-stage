@@ -29,6 +29,11 @@
       <input id="bDate" type="date">
       <button id="btnSet">入れる</button>
       <button id="btnClear">消す</button>
+      <span class="memoBulk">
+        <select id="bMemo" title="メモの欄"></select>
+        <input id="bMemoVal" type="text" placeholder="メモ（例：材料搬入済）">
+        <button id="btnMemo" title="選んだ行の、この欄に入れる（空で入れると消える）">メモを入れる</button>
+      </span>
       <button id="btnUnsel" class="ghost">選択を外す</button>
     </div>
     <div id="tableWrap">
@@ -55,6 +60,7 @@
       <button id="btnFit" class="ghost">全体</button>
     </div>
     <details class="legend"><summary>凡例</summary><div id="legend"></div></details>
+    <div id="detail" class="detail" hidden></div>
     <div id="status" class="status">準備中…</div>
     <div id="attrib" class="attrib" hidden>航空写真：<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">国土地理院</a>（位置はおおよそ）</div>
   </section>

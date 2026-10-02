@@ -91,6 +91,39 @@ def set_steps(changes_json):
     }, ensure_ascii=False)
 
 
+MEMO_MAX = 10      # 入力シートの P〜Y 列（「メモ上限ここまで」）と同じ
+
+
+def set_memos(changes_json):
+    u"""[[行番号, メモの添字(0起点), 値], ...] を入れる。変わった行だけを返す。"""
+    changes = json.loads(changes_json)
+    by_row = {r.row: r for r in BOOK.rows}
+    touched = {}
+    for row_no, idx, value in changes:
+        r = by_row.get(int(row_no))
+        if r is None or not (0 <= int(idx) < len(BOOK.memo_heads)):
+            continue
+        while len(r.memos) < len(BOOK.memo_heads):
+            r.memos.append(u"")
+        # タブと改行は TSV の区切りになるので空白に
+        r.memos[int(idx)] = u" ".join((value or u"").split("\t")).replace(u"\r", u" ").replace(u"\n", u" ").strip()
+        touched[r.row] = r
+    return json.dumps({u"rows": [_row_json(r) for r in touched.values()]}, ensure_ascii=False)
+
+
+def add_memo_col(title):
+    u"""メモの欄を 1 つ足す（エクセルで P〜Y の空いた見出しに名前を書くのと同じ）。"""
+    title = (title or u"").strip()
+    if not title or title in BOOK.memo_heads or len(BOOK.memo_heads) >= MEMO_MAX:
+        return json.dumps({u"ok": False, u"memoHeads": BOOK.memo_heads}, ensure_ascii=False)
+    BOOK.memo_heads.append(title)
+    for r in BOOK.rows:
+        while len(r.memos) < len(BOOK.memo_heads):
+            r.memos.append(u"")
+    return json.dumps({u"ok": True, u"memoHeads": BOOK.memo_heads,
+                       u"rows": [_row_json(r) for r in BOOK.rows]}, ensure_ascii=False)
+
+
 def tsv():
     buf = io.StringIO()
     S.write_tsv(BOOK, buf)

@@ -3,9 +3,9 @@
 //   IFC を組むのは tools/sheet_to_ifc.py（Pyodide で動かす。中身を作り直さない）
 //   保存 = TSV（前の版は _履歴 へ）・IFC・CSV をフォルダへ書く
 //   Web 版（projects.json があるとき）は見るだけで開き、パスワードで編集 → GitHub へコミット（web.js）
-import { Viewer } from "./viewer.js?v=20261002184640";
-import * as web from "./web.js?v=20261002184640";
-import * as geo from "./geo.js?v=20261002184640";
+import { Viewer } from "./viewer.js?v=20261003061223";
+import * as web from "./web.js?v=20261003061223";
+import * as geo from "./geo.js?v=20261003061223";
 
 const $ = (id) => document.getElementById(id);
 const IFC_NAME = "repairmodel.ifc";
@@ -354,6 +354,9 @@ function buildFilters() {
   const bs = $("bStep");
   bs.length = 0;
   doc.stepHeads.forEach((h, i) => bs.add(new Option(h, String(i))));
+  const bm = $("bMemo");
+  bm.length = 0;
+  doc.memoHeads.forEach((h, i) => bm.add(new Option(h, String(i))));
   $("bDate").value = today();
 }
 
@@ -490,7 +493,99 @@ function syncSelection() {
   $("bulk").hidden = selected.size === 0 || !editable;
   $("selCount").textContent = `${selected.size} 行を選択`;
   viewer.setSelected([...selected]);
+  showDetail();
 }
+
+// ------------------------------------------------------------ 1 行のカード（段階・日付・メモ。編集中はメモを直せる）
+
+function showDetail() {
+  const box = $("detail");
+  if (selected.size !== 1 || !doc) { box.hidden = true; return; }
+  const r = rowsByNo.get([...selected][0]);
+  if (!r) { box.hidden = true; return; }
+  box.innerHTML = "";
+  const x = document.createElement("button");
+  x.className = "x"; x.textContent = "×"; x.title = "閉じる（選択を外す）";
+  x.onclick = () => { selected.clear(); syncSelection(); };
+  const h = document.createElement("h4");
+  h.textContent = `${r.row} 行　${r.name}`;
+  const dl = document.createElement("dl");
+  const item = (k, v) => {
+    const dt = document.createElement("dt"); dt.textContent = k;
+    const dd = document.createElement("dd");
+    if (v instanceof Node) dd.appendChild(v); else dd.textContent = v;
+    dl.append(dt, dd);
+    return dd;
+  };
+  item("タイプ", r.type);
+  const chip = document.createElement("span");
+  chip.className = "chip"; chip.style.cssText = `display:inline-block;width:10px;height:10px;margin-right:4px;background:${rgbCss(r.rgb)}`;
+  const st = document.createElement("span"); st.append(chip, r.stage + (r.transp >= 1 ? "（出ない）" : ""));
+  item("段階", st);
+  r.steps.forEach((v, i) => { if (stepEnabled(r, i)) item(`${doc.stepHeads[i]} ${stepLabel(r, i)}`, v || "－"); });
+  const memoTitle = document.createElement("div");
+  memoTitle.className = "sec"; memoTitle.textContent = "メモ";
+  const ml = document.createElement("dl");
+  doc.memoHeads.forEach((mh, i) => {
+    const dt = document.createElement("dt"); dt.textContent = mh;
+    const dd = document.createElement("dd");
+    if (editable) {
+      const inp = document.createElement("input");
+      inp.value = r.memos[i] || "";
+      inp.onchange = () => applyMemo([[r.row, i, inp.value]]);
+      dd.appendChild(inp);
+    } else dd.textContent = r.memos[i] || "－";
+    ml.append(dt, dd);
+  });
+  box.append(x, h, dl);
+  // 表を隠したスマホでも段階を進められるように
+  if (editable && r.step < r.steps.length && stepEnabled(r, r.step)) {
+    const nx = document.createElement("button");
+    nx.className = "addMemo primary";
+    nx.textContent = `次の段階へ（${stepLabel(r, r.step)}・今日）`;
+    nx.onclick = () => { applyChanges([[r.row, r.step, fromIso(today())]]); showDetail(); };
+    box.appendChild(nx);
+  }
+  box.append(memoTitle, ml);
+  if (editable && doc.memoHeads.length < 10) {
+    const add = document.createElement("button");
+    add.className = "addMemo"; add.textContent = "メモの欄を足す";
+    add.title = "全部の行に新しいメモの欄を作る（エクセルの P〜Y の空いた見出しに名前を書くのと同じ。10 欄まで）";
+    add.onclick = () => {
+      const t = prompt("新しいメモの欄の名前（例：担当業者・材料搬入）");
+      if (!t) return;
+      const res = JSON.parse(eng.add_memo_col(t));
+      if (!res.ok) { alert("足せませんでした（同じ名前があるか、10 欄に達しています）"); return; }
+      doc.memoHeads = res.memoHeads;
+      for (const nr of res.rows) { rowsByNo.set(nr.row, nr); doc.rows[doc.rows.findIndex((y) => y.row === nr.row)] = nr; }
+      setDirty(true);
+      buildFilters(); buildTable(); syncSelection();
+      status(`メモの欄「${t}」を足しました（保存すると残ります）`);
+    };
+    box.appendChild(add);
+  }
+  box.hidden = false;
+}
+
+function applyMemo(changes) {
+  if (!changes.length || !editable) return;
+  const res = JSON.parse(eng.set_memos(JSON.stringify(changes)));
+  for (const r of res.rows) {
+    changedRows.add(r.row);
+    rowsByNo.set(r.row, r);
+    doc.rows[doc.rows.findIndex((x) => x.row === r.row)] = r;
+    refreshRow(r);
+  }
+  setDirty(true);
+  status(`${res.rows.length} 行のメモを変えました（保存すると TSV・IFC の属性に入ります）`);
+}
+
+$("btnMemo").onclick = () => {
+  const i = Number($("bMemo").value);
+  if (Number.isNaN(i)) return;
+  applyMemo([...selected].map((n) => [n, i, $("bMemoVal").value]));
+  showDetail();
+};
 
 $("btnUnsel").onclick = () => { selected.clear(); syncSelection(); };
 
