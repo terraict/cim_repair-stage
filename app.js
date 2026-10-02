@@ -3,8 +3,8 @@
 //   IFC を組むのは tools/sheet_to_ifc.py（Pyodide で動かす。中身を作り直さない）
 //   保存 = TSV（前の版は _履歴 へ）・IFC・CSV をフォルダへ書く
 //   Web 版（projects.json があるとき）は見るだけで開き、パスワードで編集 → GitHub へコミット（web.js）
-import { Viewer } from "./viewer.js?v=20261002173152";
-import * as web from "./web.js?v=20261002173152";
+import { Viewer } from "./viewer.js?v=20261002174120";
+import * as web from "./web.js?v=20261002174120";
 
 const $ = (id) => document.getElementById(id);
 const IFC_NAME = "repairmodel.ifc";
@@ -128,9 +128,15 @@ $("fmSetup").onsubmit = async (e) => {
   if (pw.length < 12) { msg.textContent = "パスワードは 12 文字以上にしてください"; return; }
   const where = siteRepo();
   if (!where) { msg.textContent = "リポジトリが分かりません（projects.json の repo）"; return; }
+  const tok = $("stToken").value.trim();
+  // コピーが途中で切れていると GitHub は 401 Bad credentials としか言わないので、先に形を見る
+  if (!/^github_pat_\w{60,}$/.test(tok) && !/^ghp_\w{30,}$/.test(tok)) {
+    msg.textContent = `トークンの形ではありません（${tok.length} 文字。github_pat_ で始まる 90 文字ほどの文字列を、作った直後の画面からまるごとコピーしてください）`;
+    return;
+  }
   msg.textContent = "トークンを確かめています…";
   try {
-    const r = new web.Repo($("stToken").value.trim(), where.owner, where.repo, where.branch || "main");
+    const r = new web.Repo(tok, where.owner, where.repo, where.branch || "main");
     await r.check();
     const auth = await web.encryptToken(r.token, pw, { owner: where.owner, repo: where.repo, branch: r.branch });
     msg.textContent = "書き込んでいます…";
@@ -139,7 +145,9 @@ $("fmSetup").onsubmit = async (e) => {
     await unlock(r);
     status("編集の設定をしました。次からはパスワードだけで編集できます（公開ページへの反映は 1 分ほど後）");
   } catch (err) {
-    msg.textContent = err.message;
+    msg.textContent = err.status === 401 ? "GitHub がこのトークンを受け付けません（期限切れ・取り消し・コピー違い）。作り直してまるごとコピーしてください"
+      : err.status === 403 || err.status === 404 ? "このトークンではこのリポジトリを読み書きできません（Repository access で ict_repair-stage を選び、Contents を Read and write に）"
+      : err.message;
   }
 };
 
