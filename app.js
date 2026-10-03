@@ -3,9 +3,9 @@
 //   IFC を組むのは tools/sheet_to_ifc.py（Pyodide で動かす。中身を作り直さない）
 //   保存 = TSV（前の版は _履歴 へ）・IFC・CSV をフォルダへ書く
 //   Web 版（projects.json があるとき）は見るだけで開き、パスワードで編集 → GitHub へコミット（web.js）
-import { Viewer } from "./viewer.js?v=20261003172917";
-import * as web from "./web.js?v=20261003172917";
-import * as geo from "./geo.js?v=20261003172917";
+import { Viewer } from "./viewer.js?v=20261003173821";
+import * as web from "./web.js?v=20261003173821";
+import * as geo from "./geo.js?v=20261003173821";
 
 const $ = (id) => document.getElementById(id);
 const IFC_NAME = "repairmodel.ifc";
@@ -356,14 +356,14 @@ function buildFilters() {
   doc.stepHeads.forEach((h, i) => bs.add(new Option(h, String(i))));
   const bm = $("bMemo");
   bm.length = 0;
-  doc.memoHeads.forEach((h, i) => bm.add(new Option(h, String(i))));
+  shownMemos().forEach((i) => bm.add(new Option(doc.memoHeads[i], String(i))));
   $("bDate").value = today();
 }
 
 function buildTable() {
   const head = $("thead");
   head.innerHTML = "";
-  for (const h of ["", "行", "部位の名称", "タイプ", "段階", ...doc.stepHeads, ...doc.memoHeads]) {
+  for (const h of ["", "行", "部位の名称", "タイプ", "段階", ...doc.stepHeads, ...shownMemos().map((i) => doc.memoHeads[i])]) {
     const th = document.createElement("th");
     th.textContent = h;
     head.appendChild(th);
@@ -415,10 +415,17 @@ function rowTr(r) {
     inp.onclick = (e) => e.stopPropagation();
     c.appendChild(inp);
   });
-  for (const m of r.memos) td("", m);
+  for (const i of shownMemos()) td("", r.memos[i] || "");
   tr.onclick = (e) => toggleRow(r.row, e.shiftKey, e.ctrlKey || e.metaKey);
   tr.ondblclick = () => viewer.focusRows([r.row]);
   return tr;
+}
+
+// 見る人に意味の無いメモ（道具で置いたときの作業用の記録）は画面に出さない。案件ごとに projects.json の hideMemos
+// データ・IFC・CSV には残る
+function shownMemos() {
+  const hide = new Set((project && project.hideMemos) || []);
+  return doc.memoHeads.map((h, i) => i).filter((i) => !hide.has(doc.memoHeads[i]));
 }
 
 function lastFilled(r) {
@@ -526,7 +533,8 @@ function showDetail() {
   const memoTitle = document.createElement("div");
   memoTitle.className = "sec"; memoTitle.textContent = "メモ";
   const ml = document.createElement("dl");
-  doc.memoHeads.forEach((mh, i) => {
+  shownMemos().forEach((i) => {
+    const mh = doc.memoHeads[i];
     const dt = document.createElement("dt"); dt.textContent = mh;
     const dd = document.createElement("dd");
     if (editable) {

@@ -12,7 +12,12 @@
    "bridge": [
     "projects/repairebridge/bridge.ifc"
    ],
-   "geo": "projects/repairebridge/geo.json"
+   "geo": "projects/repairebridge/geo.json",
+   "hideMemos": [
+    "場所",
+    "図面",
+    "CAD画層"
+   ]
   },
   {
    "id": "egawa",
@@ -21,7 +26,13 @@
    "bridge": [
     "projects/egawa/bridge.ifc"
    ],
-   "geo": "projects/egawa/geo.json"
+   "geo": "projects/egawa/geo.json",
+   "hideMemos": [
+    "場所",
+    "図面",
+    "面図",
+    "位置"
+   ]
   }
  ]
 }
