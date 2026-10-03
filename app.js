@@ -3,10 +3,10 @@
 //   IFC を組むのは tools/sheet_to_ifc.py（Pyodide で動かす。中身を作り直さない）
 //   保存 = TSV（前の版は _履歴 へ）・IFC・CSV をフォルダへ書く
 //   Web 版（projects.json があるとき）は見るだけで開き、パスワードで編集 → GitHub へコミット（web.js）
-import { Viewer } from "./viewer.js?v=20261003195252";
-import * as web from "./web.js?v=20261003195252";
-import * as geo from "./geo.js?v=20261003195252";
-import { buildOffline } from "./offline.js?v=20261003195252";
+import { Viewer } from "./viewer.js?v=20261003195457";
+import * as web from "./web.js?v=20261003195457";
+import * as geo from "./geo.js?v=20261003195457";
+import { buildOffline } from "./offline.js?v=20261003195457";
 
 const $ = (id) => document.getElementById(id);
 const IFC_NAME = "repairmodel.ifc";
@@ -91,6 +91,8 @@ function setEditable(on) {
     m.classList.toggle("edit", on);
     $("btnEdit").hidden = on;
     $("btnSave").hidden = !on;
+    // 書き出し（CSV・IFC・オフライン版）は編集できる人だけ。閲覧のみの人には出さない
+    for (const id of ["btnCsv", "btnIfc", "btnOffline"]) $(id).hidden = !on;
   }
   $("editTools").hidden = !on;
   if (doc) { buildTable(); syncSelection(); }
@@ -1035,8 +1037,9 @@ async function save() {
   status(`保存しました：${fileName}・${IFC_NAME}（物体 ${ifc.written} 個）・${stem()}.csv。TerraCloud へは ${IFC_NAME} をアップロードしてください`);
 }
 $("btnSave").onclick = save;
-$("btnCsv").onclick = () => download(stem() + ".csv", eng.csv(), "text/csv");
-$("btnIfc").onclick = () => download(IFC_NAME, uploadIfc().ifc, "application/octet-stream");
+const canExport = () => !site || editable;
+$("btnCsv").onclick = () => canExport() && download(stem() + ".csv", eng.csv(), "text/csv");
+$("btnIfc").onclick = () => canExport() && download(IFC_NAME, uploadIfc().ifc, "application/octet-stream");
 
 // ------------------------------------------------------------ 背景（航空写真）
 
@@ -1132,6 +1135,7 @@ async function makeOffline() {
   });
 }
 $("btnOffline").onclick = async () => {
+  if (!canExport()) return;
   if (dirty && !confirm("保存していない変更があります。いま画面に出ている内容で書き出しますか。")) return;
   $("btnOffline").disabled = true;
   try {
