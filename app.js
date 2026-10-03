@@ -3,9 +3,9 @@
 //   IFC を組むのは tools/sheet_to_ifc.py（Pyodide で動かす。中身を作り直さない）
 //   保存 = TSV（前の版は _履歴 へ）・IFC・CSV をフォルダへ書く
 //   Web 版（projects.json があるとき）は見るだけで開き、パスワードで編集 → GitHub へコミット（web.js）
-import { Viewer } from "./viewer.js?v=20261003113127";
-import * as web from "./web.js?v=20261003113127";
-import * as geo from "./geo.js?v=20261003113127";
+import { Viewer } from "./viewer.js?v=20261003161829";
+import * as web from "./web.js?v=20261003161829";
+import * as geo from "./geo.js?v=20261003161829";
 
 const $ = (id) => document.getElementById(id);
 const IFC_NAME = "repairmodel.ifc";
@@ -774,6 +774,7 @@ $("btnIfc").onclick = () => download(IFC_NAME, uploadIfc().ifc, "application/oct
 
 const BG_KEY = "repairstage.bg";
 let geoInfo = null;
+let geoCenter = 0;
 
 // geo.json があれば、モデルの x 範囲の中央から 500 m 四方の写真を敷く
 async function setGeo(g) {
@@ -781,21 +782,24 @@ async function setGeo(g) {
   // 中心はモデル（補修）の x 範囲の中央。three の x はモデルの x から原点を引いたもの
   const box = viewer.boxOf(viewer.meshes.map((m) => m.mesh));
   const xmid = box.isEmpty() ? 140 : (box.min.x + box.max.x) / 2 + (viewer.origin ? viewer.origin.x : 0);
-  const tiles = geo.tilesAround(g, xmid, 500, 18);
-  viewer.setPhoto(tiles, g.ground - g.z0);
-  $("bgMode").querySelector('option[value="photo"]').disabled = false;
+  geoCenter = xmid;
+  for (const k of Object.keys(geo.LAYERS)) $("bgMode").querySelector(`option[value="${k}"]`).disabled = false;
   let mode = "photo";
   try { mode = localStorage.getItem(BG_KEY) || "photo"; } catch { /* 既定 */ }
   applyBg(mode);
 }
 
+// 地図タイルは選ばれたときに初めて読む（種類ごとに 81 枚）
 function applyBg(mode) {
-  if (mode === "photo" && !geoInfo) mode = "grad";
+  const isMap = mode in geo.LAYERS;
+  if (isMap && !geoInfo) mode = "grad";
+  if (isMap && geoInfo) viewer.setTiles(mode, geo.tilesAround(geoInfo, geoCenter, 500, 18, mode), geoInfo.ground - geoInfo.z0);
   $("bgMode").value = mode;
   viewer.setBackgroundMode(mode);
-  $("attrib").hidden = mode !== "photo";
+  $("attrib").hidden = !(mode in geo.LAYERS);
+  if (mode in geo.LAYERS) $("attribName").textContent = geo.LAYERS[mode].name;
 }
-$("bgMode").querySelector('option[value="photo"]').disabled = true;
+for (const k of Object.keys(geo.LAYERS)) $("bgMode").querySelector(`option[value="${k}"]`).disabled = true;
 $("bgMode").onchange = () => {
   applyBg($("bgMode").value);
   try { localStorage.setItem(BG_KEY, $("bgMode").value); } catch { /* 覚えられなくても動く */ }

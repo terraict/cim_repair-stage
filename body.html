@@ -56,13 +56,14 @@
       <select id="bgMode" title="背景">
         <option value="grad">背景：暗い色</option><option value="black">背景：黒</option>
         <option value="white">背景：白</option><option value="photo">背景：航空写真</option>
+        <option value="std">背景：地図</option><option value="pale">背景：淡色地図</option>
       </select>
       <button id="btnFit" class="ghost">全体</button>
     </div>
     <details class="legend"><summary>凡例</summary><div id="legend"></div></details>
     <div id="detail" class="detail" hidden></div>
     <div id="status" class="status">準備中…</div>
-    <div id="attrib" class="attrib" hidden>航空写真：<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">国土地理院</a>（位置はおおよそ）</div>
+    <div id="attrib" class="attrib" hidden><span id="attribName">航空写真</span>：<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">国土地理院</a>（位置はおおよそ）</div>
   </section>
 </main>
 

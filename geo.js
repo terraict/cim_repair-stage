@@ -66,7 +66,15 @@ export function toLatLon(e, nn, zone) {
 }
 
 // 敷くタイルの一覧。中心（モデルの x 範囲の中央）から half m 四方
-export function tilesAround(geo, xmid, half, z) {
+// 国土地理院の地図タイル（出典の表示が要る）
+export const LAYERS = {
+  photo: { path: "seamlessphoto", ext: "jpg", name: "航空写真" },
+  std: { path: "std", ext: "png", name: "標準地図" },
+  pale: { path: "pale", ext: "png", name: "淡色地図" },
+};
+
+export function tilesAround(geo, xmid, half, z, kind = "photo") {
+  const L = LAYERS[kind];
   const [ce, cn] = modelToEN(geo, xmid, 0);
   const [la0, lo0] = toLatLon(ce - half, cn - half, geo.zone);
   const [la1, lo1] = toLatLon(ce + half, cn + half, geo.zone);
@@ -79,7 +87,7 @@ export function tilesAround(geo, xmid, half, z) {
       const [e, nn] = toEN(tile2lat(ty, z), tile2lon(tx, z), geo.zone);
       return enToModel(geo, e, nn);
     });
-    out.push({ url: `https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/${z}/${x}/${y}.jpg`, corners });
+    out.push({ url: `https://cyberjapandata.gsi.go.jp/xyz/${L.path}/${z}/${x}/${y}.${L.ext}`, corners });
   }
   return out;
 }

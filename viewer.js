@@ -33,6 +33,7 @@ export class Viewer {
     this.byRow = new Map();           // 行番号 -> [mesh...]
     this.ghost = true;
     this.origin = null;
+    this.tileGroups = {};
     this.backgrounds = [];
     this.bgOpacity = 0.4;   // 橋梁 IFC の透過 0.6 と同じ濃さ
     this.selected = new Set();
@@ -210,9 +211,10 @@ export class Viewer {
     return new THREE.Vector3(x - o.x, z - o.y, -y - o.z);
   }
 
-  // 航空写真のタイルを敷く。tiles: [{ url, corners:[[x,y]×4]（左上・右上・右下・左下、モデル座標）}]、z: 置く高さ（モデル座標）
-  setPhoto(tiles, z) {
-    this.clearPhoto();
+  // 地図タイルを敷く（航空写真・標準地図・淡色地図。種類ごとに 1 回だけ作って覚える）
+  //   tiles: [{ url, corners:[[x,y]×4]（左上・右上・右下・左下、モデル座標）}]、z: 置く高さ（モデル座標）
+  setTiles(kind, tiles, z) {
+    if (this.tileGroups[kind]) return;
     const grp = new THREE.Group();
     const loader = new THREE.TextureLoader();
     loader.setCrossOrigin("anonymous");
@@ -229,24 +231,29 @@ export class Viewer {
       m.renderOrder = -1;
       grp.add(m);
     }
-    this.photo = grp;
+    grp.visible = false;
+    this.tileGroups[kind] = grp;
     this.scene.add(grp);
     this.setBackgroundMode(this.bgMode || "grad");
   }
 
   clearPhoto() {
-    if (!this.photo) return;
-    this.photo.traverse((o) => { o.geometry?.dispose(); o.material?.map?.dispose(); o.material?.dispose(); });
-    this.scene.remove(this.photo);
-    this.photo = null;
+    for (const grp of Object.values(this.tileGroups || {})) {
+      grp.traverse((o) => { o.geometry?.dispose(); o.material?.map?.dispose(); o.material?.dispose(); });
+      this.scene.remove(grp);
+    }
+    this.tileGroups = {};
   }
 
-  // 背景：grad（既定の暗い色）/ black / white / photo（航空写真。写真が無ければ grad）
+  // いま見えている地図タイル（無ければ null）
+  get photo() { return this.tileGroups?.[this.bgMode] || null; }
+
+  // 背景：grad（暗い色）/ black / white / photo（航空写真）/ std（標準地図）/ pale（淡色地図）
   setBackgroundMode(mode) {
     this.bgMode = mode;
-    const col = { grad: 0x20262d, black: 0x000000, white: 0xf2f4f6, photo: 0xbfd3e6 }[mode] ?? 0x20262d;
+    const col = { grad: 0x20262d, black: 0x000000, white: 0xf2f4f6, photo: 0xbfd3e6, std: 0xf2efe9, pale: 0xf2efe9 }[mode] ?? 0x20262d;
     this.scene.background = new THREE.Color(col);
-    if (this.photo) this.photo.visible = mode === "photo";
+    for (const [k, grp] of Object.entries(this.tileGroups || {})) grp.visible = k === mode;
   }
 
   clearBackgrounds() {
