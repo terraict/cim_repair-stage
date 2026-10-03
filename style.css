@@ -104,7 +104,7 @@ dialog { border: 1px solid var(--line); border-radius: 6px; background: var(--pa
 
 /* 3D の欄が狭いとき：操作欄を詰め、凡例はその下へ */
 #right { container-type: size; }
-@container (max-width: 560px) {
+@container (max-width: 820px) {
   .viewbar { font-size: 11px; gap: 4px; padding: 2px 6px; max-width: calc(100% - 16px); flex-wrap: wrap; justify-content: flex-end; }
   .viewbar input[type=range] { width: 70px; }
   .legend { top: 80px; max-height: 35%; }
