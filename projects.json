@@ -15,13 +15,13 @@
    "geo": "projects/repairebridge/geo.json"
   },
   {
-   "id": "repairebridge2",
-   "name": "REPAIREBRIDGE 2",
-   "tsv": "projects/repairebridge2/data.tsv",
+   "id": "egawa",
+   "name": "江川橋",
+   "tsv": "projects/egawa/data.tsv",
    "bridge": [
-    "projects/repairebridge2/bridge.ifc"
+    "projects/egawa/bridge.ifc"
    ],
-   "geo": "projects/repairebridge2/geo.json"
+   "geo": "projects/egawa/geo.json"
   }
  ]
 }
