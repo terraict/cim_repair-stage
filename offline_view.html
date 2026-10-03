@@ -38,8 +38,8 @@ td.num { color: var(--muted); text-align: right; }
 .stepLabel { color: var(--muted); font-size: 12px; margin-right: 4px; }
 .memoPick { position: relative; }
 .memoPick summary { cursor: pointer; border: 1px solid var(--line); border-radius: 4px; padding: 3px 8px; background: var(--panel); list-style: none; }
-#memoPickList { position: absolute; z-index: 5; top: 110%; left: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; min-width: 12em; }
-#memoPickList label { display: block; white-space: nowrap; }
+.pickList { position: absolute; z-index: 5; top: 110%; left: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; min-width: 12em; }
+.pickList label { display: block; white-space: nowrap; }
 #right { position: relative; min-height: 0; background: #20262d; container-type: size; }
 #view { position: absolute; inset: 0; overflow: hidden; }
 #view canvas { display: block; width: 100%; height: 100%; }
@@ -80,7 +80,8 @@ dialog { border: 1px solid var(--line); border-radius: 6px; background: var(--pa
       <input id="q" type="search" placeholder="名称・メモで絞る">
       <select id="fType"><option value="">タイプ：すべて</option></select>
       <select id="fStage"><option value="">段階：すべて</option></select>
-      <details class="memoPick"><summary>メモの表示</summary><div id="memoPickList"></div></details>
+      <details class="memoPick"><summary>STEP の表示</summary><div id="stepPickList" class="pickList"></div></details>
+      <details class="memoPick"><summary>メモの表示</summary><div id="memoPickList" class="pickList"></div></details>
     </div>
     <div id="tableWrap"><table><thead><tr id="thead"></tr></thead><tbody id="tbody"></tbody></table></div>
   </section>
@@ -258,7 +259,23 @@ dom.addEventListener("pointerup", (e) => {
 const stepEnabled = (r, i) => ((doc.types[r.type] || { names: [] }).names[i + 1] || "").length > 1;
 const stepLabel = (r, i) => (doc.types[r.type] || { names: [] }).names[i + 1] || "";
 const rgbCss = (c) => c ? `rgb(${c[0]},${c[1]},${c[2]})` : "#888";
-let stepView = 0;
+const stepKey = "repairstage.offline.steps." + meta.id;
+function shownSteps() {
+  let pick = null; try { pick = JSON.parse(localStorage.getItem(stepKey) || "null"); } catch { /* 既定 */ }
+  const all = doc.stepHeads.map((h, i) => i);
+  if (!Array.isArray(pick)) return all.slice(0, 1);
+  return all.filter((i) => pick.includes(doc.stepHeads[i]));
+}
+function buildStepPick() {
+  const box = $("stepPickList"); box.innerHTML = "";
+  const shown = new Set(shownSteps());
+  doc.stepHeads.forEach((h, i) => {
+    const lab = document.createElement("label"), cb = document.createElement("input");
+    cb.type = "checkbox"; cb.checked = shown.has(i);
+    cb.onchange = () => { const names = [...box.querySelectorAll("input")].map((x, k) => x.checked ? doc.stepHeads[k] : null).filter(Boolean); try { localStorage.setItem(stepKey, JSON.stringify(names)); } catch { /* 覚えられなくても動く */ } buildTable(); };
+    lab.append(cb, " " + h); box.appendChild(lab);
+  });
+}
 const memoKey = "repairstage.offline.memos." + meta.id;
 function shownMemos() {
   let pick = null; try { pick = JSON.parse(localStorage.getItem(memoKey) || "null"); } catch { /* 既定 */ }
@@ -280,10 +297,7 @@ const photosOf = (row) => meta.photos[String(row)] || [];
 function buildTable() {
   const head = $("thead"); head.innerHTML = "";
   for (const h of ["行", "部位の名称", "タイプ", "段階", "写真"]) { const th = document.createElement("th"); th.textContent = h; head.appendChild(th); }
-  const th = document.createElement("th"), sel = document.createElement("select");
-  doc.stepHeads.forEach((h, i) => sel.add(new Option(h, String(i)))); sel.value = String(stepView);
-  sel.onchange = () => { stepView = Number(sel.value); buildTable(); };
-  th.appendChild(sel); head.appendChild(th);
+  for (const i of shownSteps()) { const t = document.createElement("th"); t.textContent = doc.stepHeads[i]; head.appendChild(t); }
   for (const i of shownMemos()) { const t = document.createElement("th"); t.textContent = doc.memoHeads[i]; head.appendChild(t); }
   const body = $("tbody"); body.innerHTML = "";
   for (const r of doc.rows) {
@@ -292,7 +306,7 @@ function buildTable() {
     td(r.row, "num"); td(r.name); td(r.type);
     const st = td(""); const ch = document.createElement("span"); ch.className = "chip"; ch.style.background = rgbCss(r.rgb); st.append(ch, r.stage + (r.transp >= 1 ? "（出ない）" : ""));
     td(photosOf(r.row).length || "", "num");
-    const sc = td(""); const lab = document.createElement("span"); lab.className = "stepLabel"; lab.textContent = stepEnabled(r, stepView) ? stepLabel(r, stepView) : "－"; sc.append(lab, r.steps[stepView] || "");
+    for (const i of shownSteps()) { const sc = td(""); sc.style.whiteSpace = "nowrap"; const lab = document.createElement("span"); lab.className = "stepLabel"; lab.textContent = stepEnabled(r, i) ? stepLabel(r, i) : "－"; sc.append(lab, r.steps[i] || ""); }
     for (const i of shownMemos()) td(r.memos[i] || "");
     tr.onclick = (e) => { pick([r.row], e.ctrlKey || e.metaKey); };
     tr.ondblclick = () => frame(boxOf(byRow.get(r.row) || []));
@@ -351,7 +365,7 @@ function legend() {
 $("btnTable").onclick = () => { const on = document.body.classList.toggle("noTable"); $("btnTable").classList.toggle("on", !on); $("btnTable").textContent = on ? "表を出す" : "表"; };
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") pick([], false); });
 
-buildMemoPick(); buildTable(); legend(); fit();
+buildStepPick(); buildMemoPick(); buildTable(); legend(); fit();
 $("status").textContent = `${doc.rows.length} 箇所。3D はクリックで選択、表の行をダブルクリックでその場所へ`;
 </script>
 </body>

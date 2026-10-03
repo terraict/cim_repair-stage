@@ -3,10 +3,10 @@
 //   IFC を組むのは tools/sheet_to_ifc.py（Pyodide で動かす。中身を作り直さない）
 //   保存 = TSV（前の版は _履歴 へ）・IFC・CSV をフォルダへ書く
 //   Web 版（projects.json があるとき）は見るだけで開き、パスワードで編集 → GitHub へコミット（web.js）
-import { Viewer } from "./viewer.js?v=20261003193636";
-import * as web from "./web.js?v=20261003193636";
-import * as geo from "./geo.js?v=20261003193636";
-import { buildOffline } from "./offline.js?v=20261003193636";
+import { Viewer } from "./viewer.js?v=20261003195252";
+import * as web from "./web.js?v=20261003195252";
+import * as geo from "./geo.js?v=20261003195252";
+import { buildOffline } from "./offline.js?v=20261003195252";
 
 const $ = (id) => document.getElementById(id);
 const IFC_NAME = "repairmodel.ifc";
@@ -361,27 +361,50 @@ function buildFilters() {
   const bm = $("bMemo");
   bm.length = 0;
   allowedMemos().forEach((i) => bm.add(new Option(doc.memoHeads[i], String(i))));
-  if (stepView >= doc.stepHeads.length) stepView = 0;
-  bs.value = String(stepView);
+  const sv = shownSteps();
+  bs.value = String(sv.length ? sv[sv.length - 1] : 0);
+  buildStepPick();
   buildMemoPick();
   $("bDate").value = today();
 }
 
-// 表の STEP は 1 列だけ。見出しのドロップダウンでどの STEP を見るか選ぶ（STEP がいくつあっても表の幅は変わらない）
-let stepView = 0;
+// 表に出す STEP は見る人が選ぶ（メモと同じ。覚える）。既定は 1 つ目だけ。STEP がいくつあっても表の幅は選んだぶんだけ
+const stepKey = () => "repairstage.steps." + (project ? project.id : "local");
+function shownSteps() {
+  let pick = null;
+  try { pick = JSON.parse(localStorage.getItem(stepKey()) || "null"); } catch { /* 既定 */ }
+  if (!Array.isArray(pick)) return doc.stepHeads.length ? [0] : [];
+  const set = new Set(pick);
+  return doc.stepHeads.map((h, i) => i).filter((i) => set.has(doc.stepHeads[i]));
+}
+function setShownSteps(names) {
+  try { localStorage.setItem(stepKey(), JSON.stringify(names)); } catch { /* 覚えられなくても動く */ }
+}
+function buildStepPick() {
+  const box = $("stepPickList");
+  box.innerHTML = "";
+  const shown = new Set(shownSteps());
+  doc.stepHeads.forEach((h, i) => {
+    const lab = document.createElement("label");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = shown.has(i);
+    cb.onchange = () => {
+      setShownSteps([...box.querySelectorAll("input")].map((x, k) => x.checked ? doc.stepHeads[k] : null).filter(Boolean));
+      if (cb.checked) $("bStep").value = String(i);     // 一括入力の STEP も合わせる
+      buildTable(); syncSelection();
+    };
+    lab.append(cb, " " + h);
+    box.appendChild(lab);
+  });
+}
 
 function buildTable() {
   const head = $("thead");
   head.innerHTML = "";
   const th = (h) => { const c = document.createElement("th"); c.textContent = h; head.appendChild(c); return c; };
   for (const h of ["", "行", "部位の名称", "タイプ", "段階", "写真"]) th(h);
-  const sel = document.createElement("select");
-  sel.className = "stepView";
-  sel.title = "表に出す STEP を選ぶ";
-  doc.stepHeads.forEach((h, i) => sel.add(new Option(h, String(i))));
-  sel.value = String(stepView);
-  sel.onchange = () => { stepView = Number(sel.value); $("bStep").value = sel.value; buildTable(); syncSelection(); };
-  th("").appendChild(sel);
+  for (const i of shownSteps()) th(doc.stepHeads[i]);
   for (const i of shownMemos()) th(doc.memoHeads[i]);
   const body = $("tbody");
   body.innerHTML = "";
@@ -416,8 +439,8 @@ function rowTr(r) {
   st.append(chip, r.stage + (r.transp >= 1 ? "（出ない）" : ""));
   const np = photosOf(r.row).length;
   td("num", np ? String(np) : "");
-  {
-    const i = stepView, v = r.steps[i] || "";
+  for (const i of shownSteps()) {
+    const v = r.steps[i] || "";
     const c = td("step" + (r.hole && v === "" && i < lastFilled(r) ? " hole" : ""));
     const lab = document.createElement("span");
     lab.className = "stepLabel";
@@ -759,7 +782,8 @@ function addStage(type) {
   if (!name) return;
   const before = doc.stepHeads.length;
   reloadState(eng.add_step(type, name, "cyan"));
-  if (doc.stepHeads.length > before) stepView = doc.stepHeads.length - 1;
+  if (doc.stepHeads.length > before)   // 足した STEP の列は表にも出す
+    setShownSteps([...shownSteps().map((k) => doc.stepHeads[k]), doc.stepHeads[doc.stepHeads.length - 1]]);
   buildFilters(); buildTable();
   status(`段階「${name}」を足しました${doc.stepHeads.length > before ? `（STEP${doc.stepHeads.length} の列を足した）` : ""}。色は「段階名・色」で変えられます（保存すると残ります）`);
   openPalette(type);
