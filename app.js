@@ -3,9 +3,9 @@
 //   IFC を組むのは tools/sheet_to_ifc.py（Pyodide で動かす。中身を作り直さない）
 //   保存 = TSV（前の版は _履歴 へ）・IFC・CSV をフォルダへ書く
 //   Web 版（projects.json があるとき）は見るだけで開き、パスワードで編集 → GitHub へコミット（web.js）
-import { Viewer } from "./viewer.js?v=20261003165509";
-import * as web from "./web.js?v=20261003165509";
-import * as geo from "./geo.js?v=20261003165509";
+import { Viewer } from "./viewer.js?v=20261003172337";
+import * as web from "./web.js?v=20261003172337";
+import * as geo from "./geo.js?v=20261003172337";
 
 const $ = (id) => document.getElementById(id);
 const IFC_NAME = "repairmodel.ifc";
