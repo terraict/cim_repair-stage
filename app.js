@@ -3,9 +3,9 @@
 //   IFC を組むのは tools/sheet_to_ifc.py（Pyodide で動かす。中身を作り直さない）
 //   保存 = TSV（前の版は _履歴 へ）・IFC・CSV をフォルダへ書く
 //   Web 版（projects.json があるとき）は見るだけで開き、パスワードで編集 → GitHub へコミット（web.js）
-import { Viewer } from "./viewer.js?v=20261003162540";
-import * as web from "./web.js?v=20261003162540";
-import * as geo from "./geo.js?v=20261003162540";
+import { Viewer } from "./viewer.js?v=20261003162657";
+import * as web from "./web.js?v=20261003162657";
+import * as geo from "./geo.js?v=20261003162657";
 
 const $ = (id) => document.getElementById(id);
 const IFC_NAME = "repairmodel.ifc";
@@ -801,8 +801,10 @@ function applyBg(mode) {
 }
 for (const k of Object.keys(geo.LAYERS)) $("bgMode").querySelector(`option[value="${k}"]`).disabled = true;
 $("bgMode").onchange = () => {
-  applyBg($("bgMode").value);
-  try { localStorage.setItem(BG_KEY, $("bgMode").value); } catch { /* 覚えられなくても動く */ }
+  // ★選んだ値を覚える（位置情報を読む前は地図が出せず暗い色に落ちるが、それを覚えると次も暗い色になる）
+  const want = $("bgMode").value;
+  applyBg(want);
+  try { localStorage.setItem(BG_KEY, want); } catch { /* 覚えられなくても動く */ }
 };
 
 // ------------------------------------------------------------ 表を出す・隠す（スマホで 3D を広く使う）
