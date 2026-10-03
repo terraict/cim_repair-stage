@@ -6,13 +6,13 @@
  },
  "projects": [
   {
-   "id": "shinasahi",
-   "name": "新旭橋",
-   "tsv": "projects/shinasahi/data.tsv",
+   "id": "repairebridge",
+   "name": "REPAIREBRIDGE",
+   "tsv": "projects/repairebridge/data.tsv",
    "bridge": [
-    "projects/shinasahi/bridge.ifc"
+    "projects/repairebridge/bridge.ifc"
    ],
-   "geo": "projects/shinasahi/geo.json"
+   "geo": "projects/repairebridge/geo.json"
   }
  ]
 }
