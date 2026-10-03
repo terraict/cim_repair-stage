@@ -26,14 +26,18 @@ def _row_json(r):
 def _types_json():
     out = {}
     for name, block in BOOK.palette.types.items():
-        if name == S.DEFAULT_TYPE:
-            continue
+        # *default も入れる（段階名・色の画面で「全タイプ共通」として直すため）
         out[name] = {
-            u"names": [BOOK.palette.cell(name, S.LABEL_NAME, s) for s in range(S.NSTEP)],
-            u"colors": [BOOK.palette.cell(name, S.LABEL_COLOR, s) for s in range(S.NSTEP)],
-            u"transp": [BOOK.palette.cell(name, S.LABEL_TRANSP, s) for s in range(S.NSTEP)],
+            u"names": [BOOK.palette.cell(name, S.LABEL_NAME, s) for s in range(_width())],
+            u"colors": [BOOK.palette.cell(name, S.LABEL_COLOR, s) for s in range(_width())],
+            u"transp": [BOOK.palette.cell(name, S.LABEL_TRANSP, s) for s in range(_width())],
         }
     return out
+
+
+def _width():
+    u"""段階の数（STEP0＝未施工 ＋ STEP の数）。"""
+    return len(BOOK.step_heads) + 1
 
 
 def _findings():
@@ -91,9 +95,6 @@ def set_steps(changes_json):
     }, ensure_ascii=False)
 
 
-MEMO_MAX = 10      # 入力シートの P〜Y 列（「メモ上限ここまで」）と同じ
-
-
 def set_memos(changes_json):
     u"""[[行番号, メモの添字(0起点), 値], ...] を入れる。変わった行だけを返す。"""
     changes = json.loads(changes_json)
@@ -114,7 +115,7 @@ def set_memos(changes_json):
 def add_memo_col(title):
     u"""メモの欄を 1 つ足す（エクセルで P〜Y の空いた見出しに名前を書くのと同じ）。"""
     title = (title or u"").strip()
-    if not title or title in BOOK.memo_heads or len(BOOK.memo_heads) >= MEMO_MAX:
+    if not title or title in BOOK.memo_heads:
         return json.dumps({u"ok": False, u"memoHeads": BOOK.memo_heads}, ensure_ascii=False)
     BOOK.memo_heads.append(title)
     for r in BOOK.rows:
@@ -122,6 +123,41 @@ def add_memo_col(title):
             r.memos.append(u"")
     return json.dumps({u"ok": True, u"memoHeads": BOOK.memo_heads,
                        u"rows": [_row_json(r) for r in BOOK.rows]}, ensure_ascii=False)
+
+
+def _last_stage(type_):
+    u"""そのタイプが使っている最後の段階（STEP0 から数えた添字）。1 文字（－）の段階名は使っていない。"""
+    last = 0
+    for i in range(1, _width()):
+        if len(BOOK.palette.cell(type_, S.LABEL_NAME, i)) > 1:
+            last = i
+    return last
+
+
+def add_step(type_, name, color):
+    u"""段階を 1 つ足す。そのタイプがいま使っている最後の段階の次に入れる（工種ごとに使う STEP の数が違うため）。
+    STEP の列が足りなければ列を足す（いくつでもよい）。*default* を渡すと、行にある全タイプにそれぞれ足す。
+    既にある日付は動かない。"""
+    types = sorted({r.type for r in BOOK.rows}) if type_ == S.DEFAULT_TYPE else [type_]
+    for t in types:
+        i = _last_stage(t) + 1                     # STEP0 から数えた添字
+        while len(BOOK.step_heads) < i:
+            BOOK.step_heads.append(u"STEP%d" % (len(BOOK.step_heads) + 1))
+            for r in BOOK.rows:
+                r.steps.append(u"")
+        for label, v in ((S.LABEL_NAME, name), (S.LABEL_COLOR, color), (S.LABEL_TRANSP, u"0")):
+            set_palette(t, label, i, v)
+    return state()
+
+
+def set_palette(type_, label, step, value):
+    u"""色の表の 1 マス（タイプ・名称/色/透過・段階）を変える。空にすると既定（*default*）に戻る。"""
+    block = BOOK.palette.types.setdefault(type_, {})
+    vals = block.setdefault(label, [])
+    while len(vals) <= int(step):
+        vals.append(u"")
+    vals[int(step)] = (value or u"").strip()
+    return state()
 
 
 def tsv():

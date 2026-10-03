@@ -3,9 +3,10 @@
 //   IFC を組むのは tools/sheet_to_ifc.py（Pyodide で動かす。中身を作り直さない）
 //   保存 = TSV（前の版は _履歴 へ）・IFC・CSV をフォルダへ書く
 //   Web 版（projects.json があるとき）は見るだけで開き、パスワードで編集 → GitHub へコミット（web.js）
-import { Viewer } from "./viewer.js?v=20261003173821";
-import * as web from "./web.js?v=20261003173821";
-import * as geo from "./geo.js?v=20261003173821";
+import { Viewer } from "./viewer.js?v=20261003193636";
+import * as web from "./web.js?v=20261003193636";
+import * as geo from "./geo.js?v=20261003193636";
+import { buildOffline } from "./offline.js?v=20261003193636";
 
 const $ = (id) => document.getElementById(id);
 const IFC_NAME = "repairmodel.ifc";
@@ -71,6 +72,8 @@ async function startSite() {
   if (want !== p.id) history.replaceState(null, "", "?p=" + encodeURIComponent(p.id));
   bgFiles = (p.bridge || []).map((path) => ({ name: path.split("/").pop(), text: () => web.fetchText(path) }));
   status("データを読み込み中…");
+  try { photos = JSON.parse(await web.fetchText(p.tsv.replace(/[^/]+$/, "") + "photos.json")); }
+  catch { photos = { rows: {} }; }   // まだ写真が無い案件
   await openText(await web.fetchText(p.tsv), p.name + ".tsv");
   $("docName").textContent = p.name;
   if (p.geo) {
@@ -89,6 +92,7 @@ function setEditable(on) {
     $("btnEdit").hidden = on;
     $("btnSave").hidden = !on;
   }
+  $("editTools").hidden = !on;
   if (doc) { buildTable(); syncSelection(); }
 }
 
@@ -291,7 +295,7 @@ async function openText(text, name) {
   selected.clear();
   setDirty(false);
   $("docName").textContent = (dirHandle ? dirHandle.name + " / " : "") + name;
-  for (const id of ["btnSave", "btnCsv", "btnIfc"]) $(id).disabled = false;
+  for (const id of ["btnSave", "btnCsv", "btnIfc", "btnOffline"]) $(id).disabled = false;
   $("btnSave").textContent = dirHandle || site ? "保存" : "保存（ダウンロード）";
   $("empty").hidden = true;
   buildFilters();
@@ -356,18 +360,29 @@ function buildFilters() {
   doc.stepHeads.forEach((h, i) => bs.add(new Option(h, String(i))));
   const bm = $("bMemo");
   bm.length = 0;
-  shownMemos().forEach((i) => bm.add(new Option(doc.memoHeads[i], String(i))));
+  allowedMemos().forEach((i) => bm.add(new Option(doc.memoHeads[i], String(i))));
+  if (stepView >= doc.stepHeads.length) stepView = 0;
+  bs.value = String(stepView);
+  buildMemoPick();
   $("bDate").value = today();
 }
+
+// 表の STEP は 1 列だけ。見出しのドロップダウンでどの STEP を見るか選ぶ（STEP がいくつあっても表の幅は変わらない）
+let stepView = 0;
 
 function buildTable() {
   const head = $("thead");
   head.innerHTML = "";
-  for (const h of ["", "行", "部位の名称", "タイプ", "段階", ...doc.stepHeads, ...shownMemos().map((i) => doc.memoHeads[i])]) {
-    const th = document.createElement("th");
-    th.textContent = h;
-    head.appendChild(th);
-  }
+  const th = (h) => { const c = document.createElement("th"); c.textContent = h; head.appendChild(c); return c; };
+  for (const h of ["", "行", "部位の名称", "タイプ", "段階", "写真"]) th(h);
+  const sel = document.createElement("select");
+  sel.className = "stepView";
+  sel.title = "表に出す STEP を選ぶ";
+  doc.stepHeads.forEach((h, i) => sel.add(new Option(h, String(i))));
+  sel.value = String(stepView);
+  sel.onchange = () => { stepView = Number(sel.value); $("bStep").value = sel.value; buildTable(); syncSelection(); };
+  th("").appendChild(sel);
+  for (const i of shownMemos()) th(doc.memoHeads[i]);
   const body = $("tbody");
   body.innerHTML = "";
   for (const r of doc.rows) body.appendChild(rowTr(r));
@@ -399,8 +414,14 @@ function rowTr(r) {
   chip.style.background = rgbCss(r.rgb);
   chip.style.opacity = r.transp >= 1 ? 0.25 : 1 - r.transp * 0.6;
   st.append(chip, r.stage + (r.transp >= 1 ? "（出ない）" : ""));
-  r.steps.forEach((v, i) => {
-    const c = td(r.hole && v === "" && i < lastFilled(r) ? "hole" : "");
+  const np = photosOf(r.row).length;
+  td("num", np ? String(np) : "");
+  {
+    const i = stepView, v = r.steps[i] || "";
+    const c = td("step" + (r.hole && v === "" && i < lastFilled(r) ? " hole" : ""));
+    const lab = document.createElement("span");
+    lab.className = "stepLabel";
+    lab.textContent = stepEnabled(r, i) ? stepLabel(r, i) : "－";
     const iso = toIso(v);
     const inp = document.createElement("input");
     if (v !== "" && !iso) {
@@ -413,8 +434,8 @@ function rowTr(r) {
       inp.onchange = () => applyChanges([[r.row, i, fromIso(inp.value)]]);
     }
     inp.onclick = (e) => e.stopPropagation();
-    c.appendChild(inp);
-  });
+    c.append(lab, inp);
+  }
   for (const i of shownMemos()) td("", r.memos[i] || "");
   tr.onclick = (e) => toggleRow(r.row, e.shiftKey, e.ctrlKey || e.metaKey);
   tr.ondblclick = () => viewer.focusRows([r.row]);
@@ -423,9 +444,41 @@ function rowTr(r) {
 
 // 見る人に意味の無いメモ（道具で置いたときの作業用の記録）は画面に出さない。案件ごとに projects.json の hideMemos
 // データ・IFC・CSV には残る
-function shownMemos() {
+function allowedMemos() {
   const hide = new Set((project && project.hideMemos) || []);
   return doc.memoHeads.map((h, i) => i).filter((i) => !hide.has(doc.memoHeads[i]));
+}
+
+// そのうち表とカードに出すものは見る人が選ぶ（覚える）。既定は 1 つ目だけ
+const memoKey = () => "repairstage.memos." + (project ? project.id : "local");
+function shownMemos() {
+  const allowed = allowedMemos();
+  let pick = null;
+  try { pick = JSON.parse(localStorage.getItem(memoKey()) || "null"); } catch { /* 既定 */ }
+  if (!Array.isArray(pick)) return allowed.slice(0, 1);
+  const set = new Set(pick);
+  return allowed.filter((i) => set.has(doc.memoHeads[i]));
+}
+function setShownMemos(names) {
+  try { localStorage.setItem(memoKey(), JSON.stringify(names)); } catch { /* 覚えられなくても動く */ }
+}
+function buildMemoPick() {
+  const box = $("memoPickList");
+  box.innerHTML = "";
+  const shown = new Set(shownMemos());
+  for (const i of allowedMemos()) {
+    const lab = document.createElement("label");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = shown.has(i);
+    cb.onchange = () => {
+      const names = [...box.querySelectorAll("input")].map((x, k) => x.checked ? allowedMemos()[k] : -1).filter((k) => k >= 0).map((k) => doc.memoHeads[k]);
+      setShownMemos(names);
+      buildTable(); syncSelection();
+    };
+    lab.append(cb, " " + doc.memoHeads[i]);
+    box.appendChild(lab);
+  }
 }
 
 function lastFilled(r) {
@@ -533,7 +586,8 @@ function showDetail() {
   const memoTitle = document.createElement("div");
   memoTitle.className = "sec"; memoTitle.textContent = "メモ";
   const ml = document.createElement("dl");
-  shownMemos().forEach((i) => {
+  // 見るときは選んだ欄だけ、編集中は全部の欄
+  (editable ? allowedMemos() : shownMemos()).forEach((i) => {
     const mh = doc.memoHeads[i];
     const dt = document.createElement("dt"); dt.textContent = mh;
     const dd = document.createElement("dd");
@@ -554,17 +608,19 @@ function showDetail() {
     nx.onclick = () => { applyChanges([[r.row, r.step, fromIso(today())]]); showDetail(); };
     box.appendChild(nx);
   }
-  box.append(memoTitle, ml);
-  if (editable && doc.memoHeads.length < 10) {
+  if (ml.childNodes.length) box.append(memoTitle, ml);
+  box.append(photoSection(r));
+  if (editable) {
     const add = document.createElement("button");
     add.className = "addMemo"; add.textContent = "メモの欄を足す";
-    add.title = "全部の行に新しいメモの欄を作る（エクセルの P〜Y の空いた見出しに名前を書くのと同じ。10 欄まで）";
+    add.title = "全部の行に新しいメモの欄を作る（いくつでも）";
     add.onclick = () => {
       const t = prompt("新しいメモの欄の名前（例：担当業者・材料搬入）");
       if (!t) return;
       const res = JSON.parse(eng.add_memo_col(t));
-      if (!res.ok) { alert("足せませんでした（同じ名前があるか、10 欄に達しています）"); return; }
+      if (!res.ok) { alert("足せませんでした（同じ名前の欄があります）"); return; }
       doc.memoHeads = res.memoHeads;
+      setShownMemos([...shownMemos().map((k) => doc.memoHeads[k]), t]);   // 足した欄は表にも出す
       for (const nr of res.rows) { rowsByNo.set(nr.row, nr); doc.rows[doc.rows.findIndex((y) => y.row === nr.row)] = nr; }
       setDirty(true);
       buildFilters(); buildTable(); syncSelection();
@@ -573,6 +629,185 @@ function showDetail() {
     box.appendChild(add);
   }
   box.hidden = false;
+}
+
+// ------------------------------------------------------------ 写真（施工箇所ごと。Web 版だけ）
+//   projects/<id>/photos.json … {"rows": {"<行>": [{"f": "photos/<行>/<名前>.jpg", "n": "元の名前", "d": "2026-10-03"}]}}
+//   画像は長辺 1600 px の JPEG に縮めてからコミットする
+
+let photos = { rows: {} };
+const photoURL = new Map();          // 上げたばかりの写真は Pages に出るまで手元の画像で見せる
+const photoDir = () => (project ? project.tsv.replace(/[^/]+$/, "") : "");
+const photosOf = (row) => (photos.rows && photos.rows[String(row)]) || [];
+
+function photoSection(r) {
+  const wrap = document.createElement("div");
+  const list = photosOf(r.row);
+  if (!list.length && !(editable && site)) return wrap;
+  const t = document.createElement("div");
+  t.className = "sec"; t.textContent = `写真（${list.length}）`;
+  const th = document.createElement("div");
+  th.className = "thumbs";
+  list.forEach((ph, k) => {
+    const img = document.createElement("img");
+    img.src = photoURL.get(ph.f) || photoDir() + ph.f;
+    img.alt = ph.n || "";
+    img.title = `${ph.n || ""} ${ph.d || ""}`;
+    img.loading = "lazy";
+    img.onclick = () => openPhoto(r.row, k);
+    th.appendChild(img);
+  });
+  wrap.append(t, th);
+  if (editable && site) {
+    const add = document.createElement("button");
+    add.className = "addMemo"; add.textContent = "写真を足す";
+    add.onclick = () => { $("photoInput").dataset.row = r.row; $("photoInput").click(); };
+    wrap.appendChild(add);
+  }
+  return wrap;
+}
+
+function openPhoto(row, k) {
+  const ph = photosOf(row)[k];
+  $("photoBig").src = photoURL.get(ph.f) || photoDir() + ph.f;
+  $("photoInfo").textContent = `${row} 行　${ph.n || ""}　${ph.d || ""}`;
+  $("btnPhotoDel").hidden = !(editable && site);
+  $("btnPhotoDel").onclick = () => deletePhoto(row, k);
+  $("dlgPhoto").showModal();
+}
+
+// 長辺 1600 px の JPEG へ
+async function shrink(file) {
+  const bmp = await createImageBitmap(file);
+  const k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+  const cv = document.createElement("canvas");
+  cv.width = Math.round(bmp.width * k); cv.height = Math.round(bmp.height * k);
+  cv.getContext("2d").drawImage(bmp, 0, 0, cv.width, cv.height);
+  return await new Promise((res) => cv.toBlob(res, "image/jpeg", 0.85));
+}
+const toB64 = (blob) => new Promise((res) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result).split(",")[1]); fr.readAsDataURL(blob); });
+
+async function latestPhotos() {
+  try { return JSON.parse((await repo.read(photoDir() + "photos.json")).text); }
+  catch (e) { if (e.status === 404) return { rows: {} }; throw e; }
+}
+
+$("photoInput").onchange = async (e) => {
+  const files = [...e.target.files];
+  const row = e.target.dataset.row;
+  e.target.value = "";
+  if (!files.length || !repo) return;
+  status(`写真を上げています…（${files.length} 枚）`);
+  try {
+    const cur = await latestPhotos();
+    const items = [], commit = [];
+    for (const [k, f] of files.entries()) {
+      const blob = await shrink(f);
+      const name = `photos/${row}/${Date.now()}_${k}.jpg`;
+      commit.push({ path: photoDir() + name, content: await toB64(blob), encoding: "base64" });
+      photoURL.set(name, URL.createObjectURL(blob));
+      items.push({ f: name, n: f.name, d: today() });
+    }
+    cur.rows = cur.rows || {};
+    cur.rows[row] = [...(cur.rows[row] || []), ...items];
+    commit.push({ path: photoDir() + "photos.json", content: JSON.stringify(cur, null, 1) + "\n" });
+    const res = await repo.commit(commit, `${project.name}: 写真を追加（${row} 行・${items.length} 枚）`);
+    photos = cur;
+    refreshRow(rowsByNo.get(Number(row)));
+    showDetail();
+    status(`写真を ${items.length} 枚上げました（${res.commit.slice(0, 7)}）。見る人のページには 1 分ほどで出ます`);
+  } catch (err) {
+    alert("写真を上げられませんでした。\n" + err.message);
+    status("写真を上げられませんでした");
+  }
+};
+
+async function deletePhoto(row, k) {
+  if (!confirm("この写真を消しますか。")) return;
+  try {
+    const cur = await latestPhotos();
+    const ph = photosOf(row)[k];
+    cur.rows[String(row)] = (cur.rows[String(row)] || []).filter((x) => x.f !== ph.f);
+    await repo.commit([{ path: photoDir() + ph.f, delete: true },
+      { path: photoDir() + "photos.json", content: JSON.stringify(cur, null, 1) + "\n" }],
+      `${project.name}: 写真を消す（${row} 行）`);
+    photos = cur;
+    $("dlgPhoto").close();
+    refreshRow(rowsByNo.get(Number(row)));
+    showDetail();
+    status("写真を消しました");
+  } catch (err) {
+    alert("消せませんでした。\n" + err.message);
+  }
+}
+
+// ------------------------------------------------------------ STEP を足す・段階名と色（編集中）
+
+function reloadState(json) {
+  doc = JSON.parse(json);
+  rowsByNo = new Map(doc.rows.map((r) => [r.row, r]));
+  buildFilters(); buildTable(); syncSelection();
+  showFindings();
+  viewer.recolor(doc.rows);
+  updateLegend();
+  setDirty(true);
+}
+
+// 段階を足す：工種ごとに、いま使っている最後の段階の次へ（全タイプ共通なら各工種それぞれへ）
+function addStage(type) {
+  const name = prompt(`足す段階の名前（例：検査）${type === "*default" ? "\n全部の工種に、それぞれの最後の段階の次として足します" : "\n工種：" + type}`);
+  if (!name) return;
+  const before = doc.stepHeads.length;
+  reloadState(eng.add_step(type, name, "cyan"));
+  if (doc.stepHeads.length > before) stepView = doc.stepHeads.length - 1;
+  buildFilters(); buildTable();
+  status(`段階「${name}」を足しました${doc.stepHeads.length > before ? `（STEP${doc.stepHeads.length} の列を足した）` : ""}。色は「段階名・色」で変えられます（保存すると残ります）`);
+  openPalette(type);
+}
+$("btnAddStep").onclick = () => openPalette("*default");
+
+$("btnPalette").onclick = () => openPalette("*default");
+
+function openPalette(type) {
+  const sel = $("palType");
+  sel.length = 0;
+  sel.add(new Option("全タイプ共通（既定）", "*default"));
+  for (const t of [...new Set(doc.rows.map((r) => r.type))]) sel.add(new Option(t, t));
+  sel.value = type;
+  sel.onchange = () => fillPalette(sel.value);
+  $("btnPalAdd").onclick = () => addStage(sel.value);
+  fillPalette(type);
+  if (!$("dlgPalette").open) $("dlgPalette").showModal();
+}
+
+function fillPalette(type) {
+  const t = doc.types[type] || { names: [], colors: [], transp: [] };
+  const body = $("palBody");
+  body.innerHTML = "";
+  const colors = Object.keys(doc.colors);
+  for (let i = 0; i <= doc.stepHeads.length; i++) {
+    const tr = document.createElement("tr");
+    const td = (el) => { const c = document.createElement("td"); if (el) c.append(el); tr.appendChild(c); return c; };
+    td(document.createTextNode(i === 0 ? "STEP0（はじめ）" : doc.stepHeads[i - 1]));
+    const nm = document.createElement("input");
+    nm.value = t.names[i] || "";
+    nm.onchange = () => { reloadState(eng.set_palette(type, "名称", i, nm.value)); fillPalette(type); };
+    td(nm);
+    const cs = document.createElement("select");
+    cs.add(new Option("（共通のまま）", ""));
+    for (const c of colors) cs.add(new Option(c, c));
+    cs.value = t.colors[i] || "";
+    const sw = document.createElement("span");
+    sw.className = "chip"; sw.style.cssText = `display:inline-block;width:12px;height:12px;margin-left:4px;background:${rgbCss(doc.colors[t.colors[i]])}`;
+    cs.onchange = () => { reloadState(eng.set_palette(type, "色", i, cs.value)); fillPalette(type); };
+    td(cs).appendChild(sw);
+    const tp = document.createElement("select");
+    for (const [v, l] of [["0", "見える"], ["0.5", "半透明"], ["1", "出さない"]]) tp.add(new Option(l, v));
+    tp.value = String(Number(t.transp[i] || 0) >= 1 ? 1 : Number(t.transp[i] || 0) > 0 ? 0.5 : 0);
+    tp.onchange = () => { reloadState(eng.set_palette(type, "透過", i, tp.value)); fillPalette(type); };
+    td(tp);
+    body.appendChild(tr);
+  }
 }
 
 function applyMemo(changes) {
@@ -647,6 +882,7 @@ function applyChanges(changes) {
   setDirty(true);
   viewer.recolor(doc.rows);
   updateLegend();
+  showDetail();                        // カードの段階・日付も新しくする
   status(`${res.rows.length} 行を変えました（保存すると TSV・IFC に入ります）`);
 }
 
@@ -862,7 +1098,37 @@ $("split").addEventListener("pointerdown", (e) => {
 });
 $("split").ondblclick = () => { setLeftWidth(null); try { localStorage.removeItem(LEFTW_KEY); } catch { /* 同上 */ } };
 
+// ------------------------------------------------------------ オフライン版（閲覧のみの 1 つの HTML）
+
+async function makeOffline() {
+  return await buildOffline({
+    viewer, doc, project, photos, status,
+    memoIdx: allowedMemos(),
+    photoBase: (p) => photoURL.get(p.f) || photoDir() + p.f,
+  });
+}
+$("btnOffline").onclick = async () => {
+  if (dirty && !confirm("保存していない変更があります。いま画面に出ている内容で書き出しますか。")) return;
+  $("btnOffline").disabled = true;
+  try {
+    const r = await makeOffline();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([r.html], { type: "text/html" }));
+    a.download = r.name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    status(`オフライン版を書き出しました（${r.name}・${(r.size / 1048576).toFixed(1)} MB）。このファイルだけで、ネットにつながなくても見られます（閲覧のみ）`);
+  } catch (err) {
+    alert("書き出せませんでした。\n" + err.message);
+    status("オフライン版を書き出せませんでした");
+  } finally {
+    $("btnOffline").disabled = false;
+  }
+};
+
 // 試験用（開発者ツールから。保存はダウンロードになる）
+window.__offline = makeOffline;
+window.__reload = () => reloadState(eng.state());
 window.__viewer = viewer;
 window.__eng = () => eng;
 window.__openUrl = async (u, bgs = []) => {

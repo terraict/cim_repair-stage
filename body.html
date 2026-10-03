@@ -13,6 +13,7 @@
   <button id="btnSave" class="primary" disabled title="TSV・IFC・CSV をフォルダへ書く（Ctrl+S）">保存</button>
   <button id="btnCsv" disabled>CSV</button>
   <button id="btnIfc" disabled>IFC</button>
+  <button id="btnOffline" disabled title="ネットにつながなくても見られる 1 つの HTML（閲覧のみ）を書き出す">オフライン版</button>
 </header>
 
 <main>
@@ -21,6 +22,11 @@
       <input id="q" type="search" placeholder="名称・メモで絞る">
       <select id="fType"><option value="">タイプ：すべて</option></select>
       <select id="fStage"><option value="">段階：すべて</option></select>
+      <details class="memoPick"><summary>メモの表示</summary><div id="memoPickList"></div></details>
+      <span id="editTools" hidden>
+        <button id="btnPalette" title="工種ごとの段階名・色・見え方。段階を足すのもここ">段階名・色</button>
+        <button id="btnAddStep" hidden></button>
+      </span>
     </div>
     <div id="bulk" class="bulk" hidden>
       <span id="selCount"></span>
@@ -77,6 +83,21 @@
   <div id="pickList"></div>
   <form method="dialog"><button>やめる</button></form>
 </dialog>
+
+<dialog id="dlgPhoto" class="photoDlg">
+  <img id="photoBig" alt="">
+  <div class="photoMeta"><span id="photoInfo"></span>
+    <button id="btnPhotoDel" hidden>この写真を消す</button>
+    <form method="dialog" style="display:inline"><button>閉じる</button></form></div>
+</dialog>
+<dialog id="dlgPalette">
+  <h3>段階名・色</h3>
+  <div><select id="palType"></select> <button id="btnPalAdd" title="この工種の最後の段階の次に足す">段階を足す</button>
+    <span class="small">段階名を「－」にするとその段階は使わない。空にすると「全タイプ共通」の値</span></div>
+  <table class="palTable"><thead><tr><th>段階</th><th>段階名</th><th>色</th><th>見え方</th></tr></thead><tbody id="palBody"></tbody></table>
+  <form method="dialog"><button>閉じる</button></form>
+</dialog>
+<input id="photoInput" type="file" accept="image/*" multiple hidden>
 
 <dialog id="dlgLogin">
   <h3>編集する</h3>

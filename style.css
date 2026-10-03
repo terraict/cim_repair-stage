@@ -47,6 +47,23 @@ body.noTable #left, body.noTable #split { display: none !important; }
 .detail dd input { width: 100%; border: 1px solid var(--line); border-radius: 3px; padding: 1px 4px; background: var(--panel); }
 .detail .sec { margin-top: 6px; font-weight: 600; }
 .detail .addMemo { margin-top: 6px; }
+td.step { white-space: nowrap; }
+.stepLabel { display: inline-block; min-width: 4em; color: var(--muted); font-size: 12px; margin-right: 4px; }
+select.stepView { font-weight: 600; border: 1px solid var(--accent); border-radius: 4px; padding: 1px 4px; background: var(--panel); }
+.memoPick { position: relative; }
+.memoPick summary { cursor: pointer; border: 1px solid var(--line); border-radius: 4px; padding: 3px 8px; background: var(--panel); list-style: none; }
+.memoPick[open] summary { border-color: var(--accent); }
+#memoPickList { position: absolute; z-index: 5; top: 110%; left: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+  padding: 6px 10px; box-shadow: 0 2px 10px rgba(0,0,0,.2); min-width: 12em; }
+#memoPickList label { display: block; white-space: nowrap; margin: 2px 0; }
+.thumbs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.thumbs img { width: 72px; height: 54px; object-fit: cover; border-radius: 3px; cursor: zoom-in; border: 1px solid var(--line); }
+.photoDlg { max-width: 96vw; max-height: 94vh; padding: 8px; }
+.photoDlg img { display: block; max-width: 92vw; max-height: 80vh; margin: 0 auto 6px; }
+.photoMeta { display: flex; gap: 8px; align-items: center; justify-content: space-between; font-size: 12px; }
+.palTable { border-collapse: collapse; margin: 8px 0; }
+.palTable td, .palTable th { border-bottom: 1px solid var(--line); padding: 3px 6px; }
+.palTable input { width: 10em; }
 .memoBulk { display: inline-flex; gap: 4px; align-items: center; }
 .memoBulk input { width: 14ch; border: 1px solid var(--line); border-radius: 4px; padding: 3px 6px; background: var(--panel); }
 .attrib { position: absolute; right: 8px; bottom: 8px; font-size: 11px; color: #222; background: rgba(255,255,255,.75); padding: 1px 6px; border-radius: 3px; }

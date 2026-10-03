@@ -31,7 +31,7 @@ BS = chr(92)                       # 円記号。IFC の \X2\ を書くのに使
 ESC_IN, ESC_OUT = BS + "X2" + BS, BS + "X0" + BS
 LABEL_COLOR, LABEL_TRANSP, LABEL_NAME = u"色", u"透過", u"名称"
 DEFAULT_TYPE = u"*default"         # color_option の 2〜4 行目（デフォルト値）
-NSTEP = 6                          # STEP0..STEP5
+NSTEP = 6                          # STEP0..STEP5（入力シートの色の表の列数。TSV ではいくつでもよい）
 
 
 def out_stream():
@@ -89,13 +89,19 @@ class Palette(object):
         空なら *default* の同じステップを使う（Excel の ISBLANK 分岐と同じ。
         同じタイプの STEP0 へ戻るのではなく、デフォルト行の同じ列を見る）。
         """
-        step = min(max(step, 0), NSTEP - 1)
-        block = self.types.get(type_)
-        if block:
-            v = block.get(label, [u""] * NSTEP)[step]
-            if v != u"":
-                return v
-        return self.types.get(DEFAULT_TYPE, {}).get(label, [u""] * NSTEP)[step]
+        step = max(step, 0)
+
+        def at(block):
+            vals = (block or {}).get(label, [])
+            return vals[step] if step < len(vals) else u""
+        v = at(self.types.get(type_))
+        if v != u"":
+            return v
+        return at(self.types.get(DEFAULT_TYPE))
+
+    def width(self):
+        u"""色の表の列数（STEP0 から）。いちばん長いタイプに合わせる。"""
+        return max([NSTEP] + [len(v) for b in self.types.values() for v in b.values()])
 
     def rgb(self, color_name):
         return self.colors.get(color_name)
@@ -268,7 +274,8 @@ def read_tsv(path):
                 except ValueError:
                     pass
             elif section == u"[types]" and len(f0) >= 2:
-                vals = (f0[2:2 + NSTEP] + [u""] * NSTEP)[:NSTEP]
+                vals = f0[2:]                  # STEP0 から。施工段階アプリで STEP を足すと 6 列より長くなる
+                vals += [u""] * (NSTEP - len(vals))
                 book.palette.types.setdefault(f0[0], {})[f0[1]] = vals
             elif section == u"[rows]":
                 ns, nm = len(book.step_heads), len(book.memo_heads)
@@ -323,9 +330,11 @@ def write_tsv(book, fp):
     for name, rgb in book.palette.colors.items():
         line([name] + [u"%d" % v for v in rgb])
     fp.write(u"[types]\n")
+    width = max(book.palette.width(), len(book.step_heads) + 1)
     for name, block in book.palette.types.items():
         for label in (LABEL_COLOR, LABEL_TRANSP, LABEL_NAME):
-            line([name, label] + list(block.get(label, [u""] * NSTEP)))
+            vals = list(block.get(label, []))
+            line([name, label] + vals + [u""] * (width - len(vals)))
     fp.write(u"[rows]\n")
     for r in book.rows:
         cells = [u"%d" % r.row, r.name, r.type] + list(r.steps) + list(r.memos)

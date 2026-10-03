@@ -126,7 +126,9 @@ export class Repo {
     const shas = {};
     const tree = [];
     for (const f of files) {
-      const blob = await this.api("POST", "/git/blobs", { content: f.content, encoding: "utf-8" });
+      if (f.delete) { tree.push({ path: f.path, mode: "100644", type: "blob", sha: null }); continue; }   // 消す
+      // 写真などは base64（encoding: "base64"）、文字は utf-8
+      const blob = await this.api("POST", "/git/blobs", { content: f.content, encoding: f.encoding || "utf-8" });
       shas[f.path] = blob.sha;
       tree.push({ path: f.path, mode: "100644", type: "blob", sha: blob.sha });
     }
