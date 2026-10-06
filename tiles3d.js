@@ -9,7 +9,7 @@
 //     ページを開いたときに 3D を自動で選ばない（app.js）・3 時間たっても自動で読み直さない（autoRefreshToken: false）。
 //     上限は Google Cloud の割り当て（1 日の回数）で止める
 import * as THREE from "three";
-import { TilesRenderer } from "3d-tiles-renderer";
+import { TilesRenderer, FAILED } from "3d-tiles-renderer";
 import { GoogleCloudAuthPlugin, CesiumIonAuthPlugin } from "3d-tiles-renderer/plugins";
 import * as G from "./geo.js";
 
@@ -63,9 +63,10 @@ export function clipPlanes(viewer, box) {
 
 export class GoogleTiles {
   // auth ＝ { google: キー } か { ion: トークン }
-  constructor(viewer, geo, auth, onAttrib) {
+  constructor(viewer, geo, auth, onAttrib, onError) {
     this.viewer = viewer;
     this.onAttrib = onAttrib;
+    this.onError = onError;
     const tiles = this.tiles = new TilesRenderer();
     if (auth.google) tiles.registerPlugin(new GoogleCloudAuthPlugin({ apiToken: auth.google, autoRefreshToken: false }));
     else tiles.registerPlugin(new CesiumIonAuthPlugin({ apiToken: auth.ion, assetId: "2275207", autoRefreshToken: false }));
@@ -92,7 +93,7 @@ export class GoogleTiles {
     this._last = "";
     const loop = () => {
       if (this.disposed) return;
-      if (this.tiles.group.visible) {
+      if (this.tiles.group.visible && !this.failed) {
         this.viewer.camera.updateMatrixWorld();
         this.tiles.setResolutionFromRenderer(this.viewer.camera, this.viewer.renderer);
         this.tiles.update();
@@ -102,6 +103,14 @@ export class GoogleTiles {
       requestAnimationFrame(loop);
     };
     loop();
+    // キー・トークンが違う・上限に達した など（ライブラリは自動では読み直さない）。描画が止まる裏のタブでも分かるようにタイマーで見る
+    this._watch = setInterval(() => {
+      if (this.tiles.rootLoadingState === FAILED && !this.failed) {
+        this.failed = true;
+        clearInterval(this._watch);
+        this.onError?.();
+      }
+    }, 1000);
   }
 
   setVisible(v) { this.tiles.group.visible = v; }
@@ -114,6 +123,7 @@ export class GoogleTiles {
 
   dispose() {
     this.disposed = true;
+    clearInterval(this._watch);
     this.viewer.scene.remove(this.tiles.group);
     this.tiles.dispose();
   }

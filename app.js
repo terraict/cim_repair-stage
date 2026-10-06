@@ -3,10 +3,10 @@
 //   IFC を組むのは tools/sheet_to_ifc.py（Pyodide で動かす。中身を作り直さない）
 //   保存 = TSV（前の版は _履歴 へ）・IFC・CSV をフォルダへ書く
 //   Web 版（projects.json があるとき）は見るだけで開き、パスワードで編集 → GitHub へコミット（web.js）
-import { Viewer } from "./viewer.js?v=20261006151419";
-import * as web from "./web.js?v=20261006151419";
-import * as geo from "./geo.js?v=20261006151419";
-import { buildOffline } from "./offline.js?v=20261006151419";
+import { Viewer } from "./viewer.js?v=20261006153009";
+import * as web from "./web.js?v=20261006153009";
+import * as geo from "./geo.js?v=20261006153009";
+import { buildOffline } from "./offline.js?v=20261006153009";
 
 const $ = (id) => document.getElementById(id);
 const IFC_NAME = "repairmodel.ifc";
@@ -1079,18 +1079,35 @@ async function setGeo(g) {
 // 地図タイルは選ばれたときに初めて読む（種類ごとに 81 枚）
 // ★3D（Google の 3D Tiles）は fork だけの機能（2026-10-06）。キーは projects.json の googleMapsKey か URL の ?gkey=
 let g3d = null;
+// ★トークンが設定に無ければ、選んだときに貼ってもらい、このブラウザに覚える（URL に長い文字列を手で入れると間違える。2026-10-06）
+const ION_KEY = "repairstage.ionToken";
 function g3dAuth() {
   const q = new URLSearchParams(location.search);
   const google = q.get("gkey") || project?.googleMapsKey || site?.googleMapsKey || "";
-  const ion = q.get("ion") || project?.cesiumIonToken || site?.cesiumIonToken || "";
+  let mine = "";
+  try { mine = localStorage.getItem(ION_KEY) || ""; } catch { /* 覚えられないブラウザ */ }
+  const ion = q.get("ion") || project?.cesiumIonToken || site?.cesiumIonToken || mine;
   return google ? { google } : ion ? { ion } : null;
 }
-const g3dKey = () => !!g3dAuth();
+const g3dKey = () => true;     // 位置（geo.json）があれば選べる。トークンは選んだときに聞く
+function askIonToken() {
+  const t = (window.prompt("3D の背景（Google の 3D・Cesium ion 経由）のトークンを貼ってください（eyJ… で始まる長い文字列）。このブラウザに覚えます。") || "").replace(/\s+/g, "");
+  if (!t) return false;
+  try { localStorage.setItem(ION_KEY, t); } catch { /* 覚えられなくても今回は使う */ }
+  if (!g3dAuth()) window.__ionOnce = t;
+  return true;
+}
 async function showG3d(on) {
   if (!on) { g3d?.setVisible(false); $("attrib3d").hidden = true; return; }
   if (!g3d) {
-    const T = await import("./tiles3d.js?v=20261006151419");
-    g3d = new T.GoogleTiles(viewer, geoInfo, g3dAuth(), (t) => { $("attrib3dText").textContent = t; });
+    const T = await import("./tiles3d.js?v=20261006153009");
+    const auth = g3dAuth() || (window.__ionOnce ? { ion: window.__ionOnce } : null);
+    g3d = new T.GoogleTiles(viewer, geoInfo, auth, (t) => { $("attrib3dText").textContent = t; }, () => {
+      status("3D の背景を読めませんでした。トークンが違うか、今月の回数を使い切った可能性があります。もう一度選ぶとトークンを聞きます");
+      try { localStorage.removeItem(ION_KEY); } catch { /* 無ければよい */ }
+      g3d?.dispose(); g3d = null;
+      applyBg("photo");
+    });
   }
   g3d.setVisible(true);
   viewer.scene.background.set(0xbfd3e6);
@@ -1100,7 +1117,8 @@ async function showG3d(on) {
 function applyBg(mode) {
   const isMap = mode in geo.LAYERS;
   if (isMap && !geoInfo) mode = "grad";
-  if (mode === "g3d" && !(geoInfo && g3dKey())) mode = "photo";
+  if (mode === "g3d" && !geoInfo) mode = "photo";
+  if (mode === "g3d" && !g3d && !g3dAuth() && !askIonToken()) mode = "photo";
   if (isMap && geoInfo) viewer.setTiles(mode, geo.tilesAround(geoInfo, geoCenter, 500, 18, mode), geoInfo.ground - geoInfo.z0);
   $("bgMode").value = mode;
   viewer.setBackgroundMode(mode);
