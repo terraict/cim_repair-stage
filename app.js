@@ -3,10 +3,10 @@
 //   IFC を組むのは tools/sheet_to_ifc.py（Pyodide で動かす。中身を作り直さない）
 //   保存 = TSV（前の版は _履歴 へ）・IFC・CSV をフォルダへ書く
 //   Web 版（projects.json があるとき）は見るだけで開き、パスワードで編集 → GitHub へコミット（web.js）
-import { Viewer } from "./viewer.js?v=20261006165659";
-import * as web from "./web.js?v=20261006165659";
-import * as geo from "./geo.js?v=20261006165659";
-import { buildOffline } from "./offline.js?v=20261006165659";
+import { Viewer } from "./viewer.js?v=20261006170744";
+import * as web from "./web.js?v=20261006170744";
+import * as geo from "./geo.js?v=20261006170744";
+import { buildOffline } from "./offline.js?v=20261006170744";
 
 const $ = (id) => document.getElementById(id);
 const IFC_NAME = "repairmodel.ifc";
@@ -554,20 +554,35 @@ $("fStage").onchange = applyFilter;
 
 // ------------------------------------------------------------ 選ぶ
 
+// ★表でも「まとめ」（3D の 1 つの物）ごとに選ぶ（fork だけ。2026-10-06 ユーザー「行で一つの部材だけを選択したら、
+//   モデルがグループで選択されている」「色を変えられないところがある」）。日付も同じまとめの行すべてに入るので色がまだらにならない
+let groupIndex = null;
+function groupMembers(rowNo) {
+  const g = rowsByNo.get(rowNo)?.group;
+  if (!g) return [rowNo];
+  if (!groupIndex || groupIndex.src !== rowsByNo) {
+    groupIndex = { src: rowsByNo, map: new Map() };
+    for (const [n, r] of rowsByNo) if (r.group) (groupIndex.map.get(r.group) || groupIndex.map.set(r.group, []).get(r.group)).push(n);
+  }
+  return groupIndex.map.get(g) || [rowNo];
+}
+
 function toggleRow(rowNo, range, additive) {
+  const mem = groupMembers(rowNo);
   if (range && anchorRow !== null) {
     const vis = visibleRows();
     const a = vis.indexOf(anchorRow), b = vis.indexOf(rowNo);
     if (a >= 0 && b >= 0) {
-      for (let i = Math.min(a, b); i <= Math.max(a, b); i++) selected.add(vis[i]);
+      for (let i = Math.min(a, b); i <= Math.max(a, b); i++) for (const n of groupMembers(vis[i])) selected.add(n);
     }
   } else if (additive) {
-    selected.has(rowNo) ? selected.delete(rowNo) : selected.add(rowNo);
+    const on = selected.has(rowNo);
+    for (const n of mem) on ? selected.delete(n) : selected.add(n);
     anchorRow = rowNo;
   } else {
-    const only = selected.size === 1 && selected.has(rowNo);
+    const only = selected.size === mem.length && mem.every((n) => selected.has(n));
     selected.clear();
-    if (!only) selected.add(rowNo);
+    if (!only) for (const n of mem) selected.add(n);
     anchorRow = rowNo;
   }
   syncSelection();
@@ -590,7 +605,8 @@ function syncSelection() {
     tr.firstChild.firstChild.checked = on;
   }
   $("bulk").hidden = selected.size === 0 || !editable;
-  $("selCount").textContent = `${selected.size} 行を選択`;
+  const objs = new Set([...selected].map((n) => rowsByNo.get(n)?.group || "#" + n)).size;
+  $("selCount").textContent = objs === selected.size ? `${selected.size} 行を選択` : `${objs} 物（${selected.size} 行）を選択`;
   viewer.setSelected([...selected]);
   showDetail();
 }
@@ -599,8 +615,9 @@ function syncSelection() {
 
 function showDetail() {
   const box = $("detail");
-  if (selected.size !== 1 || !doc) { box.hidden = true; return; }
-  const r = rowsByNo.get([...selected][0]);
+  const oneObj = new Set([...selected].map((n) => rowsByNo.get(n)?.group || "#" + n)).size === 1;
+  if (!selected.size || !oneObj || !doc) { box.hidden = true; return; }
+  const r = rowsByNo.get(Math.min(...selected));     // まとめなら先頭の行
   if (!r) { box.hidden = true; return; }
   box.innerHTML = "";
   const x = document.createElement("button");
@@ -1102,7 +1119,7 @@ function askIonToken() {
 async function showG3d(on) {
   if (!on) { g3d?.setVisible(false); $("attrib3d").hidden = true; return; }
   if (!g3d) {
-    const T = await import("./tiles3d.js?v=20261006165659");
+    const T = await import("./tiles3d.js?v=20261006170744");
     const auth = g3dAuth() || (window.__ionOnce ? { ion: window.__ionOnce } : null);
     g3d = new T.GoogleTiles(viewer, geoInfo, auth, (t) => { $("attrib3dText").textContent = t; }, () => {
       status("3D の背景を読めませんでした。トークンが違うか、今月の回数を使い切った可能性があります。もう一度選ぶとトークンを聞きます");

@@ -297,6 +297,9 @@ export class Viewer {
         mat.transparent = me.transp > 0;
         mat.opacity = 1 - me.transp;
         mat.depthWrite = !(me.transp > 0);
+        // ★段階が進んだ物は、同じ形で重なる未施工の物（撤去する古い部材など）より手前に描く（fork だけ。2026-10-06）
+        const ahead = (me.step || 0) > 0;
+        if (mat.polygonOffset !== ahead) { mat.polygonOffset = ahead; mat.polygonOffsetFactor = -2; mat.polygonOffsetUnits = -8; mat.needsUpdate = true; }
         rec.mesh.visible = true;
       }
     }
