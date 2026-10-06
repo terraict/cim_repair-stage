@@ -75,9 +75,24 @@ export async function decryptToken(auth, password) {
 
 // ------------------------------------------------------------ GitHub
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 export class Repo {
   constructor(token, owner, repo, branch = "main") {
     Object.assign(this, { token, owner, repo, branch });
+    // ★GitHub の API は、コミットした直後にブランチの先頭を読むと、少しのあいだ前の先頭を返すことがある（読み取りの遅れ）。
+    //   保存・写真が続くと「別の保存があった」で止まったり、ref の更新が 422（not a fast forward）で断られたりした（2026-10-06）。
+    //   このページで上書きしたことのある先頭（old）が返ってきたら、遅れとみなして待って読み直す
+    this.old = new Set();
+  }
+
+  // ブランチの先頭のコミット（読み取りの遅れを待つ）
+  async head() {
+    for (let i = 0; ; i++) {
+      const h = (await this.api("GET", `/git/ref/heads/${this.branch}`)).object.sha;
+      if (!this.old.has(h) || i >= 8) return h;
+      await sleep(800 * (i + 1));
+    }
   }
 
   async api(method, path, body, accept) {
@@ -106,35 +121,46 @@ export class Repo {
     return info;
   }
 
-  // いまのブランチにあるファイルの中身と blob の sha
+  // いまのブランチにあるファイルの中身と blob の sha（先頭のコミットに固定して読む。中身と sha が食い違わない）
   async read(path) {
-    const meta = await this.api("GET", `/contents/${encodeURI(path)}?ref=${this.branch}`);
-    const text = await this.api("GET", `/contents/${encodeURI(path)}?ref=${this.branch}`, null, "application/vnd.github.raw");
+    const h = await this.head();
+    const meta = await this.api("GET", `/contents/${encodeURI(path)}?ref=${h}`);
+    const text = await this.api("GET", `/contents/${encodeURI(path)}?ref=${h}`, null, "application/vnd.github.raw");
     return { text, sha: meta.sha };
   }
 
   async sha(path) {
-    try { return (await this.api("GET", `/contents/${encodeURI(path)}?ref=${this.branch}`)).sha; }
+    const h = await this.head();
+    try { return (await this.api("GET", `/contents/${encodeURI(path)}?ref=${h}`)).sha; }
     catch (e) { if (e.status === 404) return null; throw e; }
   }
 
   // files: [{ path, content }] を 1 つのコミットにまとめる。返り値は path -> blob sha
   async commit(files, message) {
-    const ref = await this.api("GET", `/git/ref/heads/${this.branch}`);
-    const head = ref.object.sha;
-    const base = await this.api("GET", `/git/commits/${head}`);
     const shas = {};
-    const tree = [];
+    const items = [];
     for (const f of files) {
-      if (f.delete) { tree.push({ path: f.path, mode: "100644", type: "blob", sha: null }); continue; }   // 消す
+      if (f.delete) { items.push({ path: f.path, mode: "100644", type: "blob", sha: null }); continue; }   // 消す
       // 写真などは base64（encoding: "base64"）、文字は utf-8
       const blob = await this.api("POST", "/git/blobs", { content: f.content, encoding: f.encoding || "utf-8" });
       shas[f.path] = blob.sha;
-      tree.push({ path: f.path, mode: "100644", type: "blob", sha: blob.sha });
+      items.push({ path: f.path, mode: "100644", type: "blob", sha: blob.sha });
     }
-    const t = await this.api("POST", "/git/trees", { base_tree: base.tree.sha, tree });
-    const c = await this.api("POST", "/git/commits", { message, tree: t.sha, parents: [head] });
-    await this.api("PATCH", `/git/refs/heads/${this.branch}`, { sha: c.sha });
-    return { commit: c.sha, shas };
+    // 先頭が古く読めていると ref の更新が 422 で断られる。読み直してやり直す（ほかのファイルは先頭のまま残る）
+    for (let i = 0; ; i++) {
+      const head = await this.head();
+      const base = await this.api("GET", `/git/commits/${head}`);
+      const t = await this.api("POST", "/git/trees", { base_tree: base.tree.sha, tree: items });
+      const c = await this.api("POST", "/git/commits", { message, tree: t.sha, parents: [head] });
+      try {
+        await this.api("PATCH", `/git/refs/heads/${this.branch}`, { sha: c.sha });
+        this.old.add(head);
+        return { commit: c.sha, shas };
+      } catch (e) {
+        if (e.status !== 422 || i >= 4) throw e;
+        this.old.add(head);
+        await sleep(1000 * (i + 1));
+      }
+    }
   }
 }
