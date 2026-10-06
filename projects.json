@@ -34,6 +34,21 @@
     "面図",
     "位置"
    ]
+  },
+  {
+   "id": "egawa2",
+   "name": "江川橋（DWG版）",
+   "tsv": "projects/egawa2/data.tsv",
+   "bridge": [
+    "projects/egawa2/bridge.ifc"
+   ],
+   "geo": "projects/egawa2/geo.json",
+   "hideMemos": [
+    "場所",
+    "図面",
+    "面図",
+    "位置"
+   ]
   }
  ]
 }
