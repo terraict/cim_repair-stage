@@ -317,6 +317,7 @@ async function openText(text, name) {
   buildTable();
   showFindings();
   viewer.reset();
+  g3d?.dispose(); g3d = null;
   await rebuildModel(false);
   await loadBackgrounds();
   viewer.fit();
@@ -1068,22 +1069,42 @@ async function setGeo(g) {
   const xmid = box.isEmpty() ? 140 : (box.min.x + box.max.x) / 2 + (viewer.origin ? viewer.origin.x : 0);
   geoCenter = xmid;
   for (const k of Object.keys(geo.LAYERS)) $("bgMode").querySelector(`option[value="${k}"]`).disabled = false;
+  $("bgMode").querySelector('option[value="g3d"]').disabled = !g3dKey();
   let mode = "photo";
   try { mode = localStorage.getItem(BG_KEY) || "photo"; } catch { /* 既定 */ }
   applyBg(mode);
 }
 
 // 地図タイルは選ばれたときに初めて読む（種類ごとに 81 枚）
+// ★3D（Google の 3D Tiles）は fork だけの機能（2026-10-06）。キーは projects.json の googleMapsKey か URL の ?gkey=
+let g3d = null;
+function g3dKey() {
+  return new URLSearchParams(location.search).get("gkey") || project?.googleMapsKey || site?.googleMapsKey || "";
+}
+async function showG3d(on) {
+  if (!on) { g3d?.setVisible(false); $("attrib3d").hidden = true; return; }
+  if (!g3d) {
+    const T = await import("./tiles3d.js");
+    g3d = new T.GoogleTiles(viewer, geoInfo, g3dKey(), (t) => { $("attrib3dText").textContent = t; });
+  }
+  g3d.setVisible(true);
+  viewer.scene.background.set(0xbfd3e6);
+  $("attrib3d").hidden = false;
+}
+
 function applyBg(mode) {
   const isMap = mode in geo.LAYERS;
   if (isMap && !geoInfo) mode = "grad";
+  if (mode === "g3d" && !(geoInfo && g3dKey())) mode = "photo";
   if (isMap && geoInfo) viewer.setTiles(mode, geo.tilesAround(geoInfo, geoCenter, 500, 18, mode), geoInfo.ground - geoInfo.z0);
   $("bgMode").value = mode;
   viewer.setBackgroundMode(mode);
   $("attrib").hidden = !(mode in geo.LAYERS);
+  showG3d(mode === "g3d").catch((e) => { console.error(e); $("status").textContent = "3D の背景を読めませんでした：" + e.message; });
   if (mode in geo.LAYERS) $("attribName").textContent = geo.LAYERS[mode].name;
 }
 for (const k of Object.keys(geo.LAYERS)) $("bgMode").querySelector(`option[value="${k}"]`).disabled = true;
+$("bgMode").querySelector('option[value="g3d"]').disabled = true;
 $("bgMode").onchange = () => {
   // ★選んだ値を覚える（位置情報を読む前は地図が出せず暗い色に落ちるが、それを覚えると次も暗い色になる）
   const want = $("bgMode").value;
