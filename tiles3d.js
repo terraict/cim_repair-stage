@@ -3,6 +3,9 @@
 //   モデルの原点（A1 の端 × 中心線 × 起点の路面）の楕円体高 ＝ geo.z0（標高）＋ geo.geoid（ジオイド高）
 //   モデルの橋と重なる既存の橋は、geo.clip の箱（モデル座標 [x0, x1, y0, y1, z0, z1]）の中を消す
 //   キーは projects.json の googleMapsKey（使えるサイトを制限したキー）か、URL の ?gkey=
+//   ★請求を出さない：Google が数えるのは読み始め（root tileset）1 回ごと（月 1,000 回まで無料）。
+//     ページを開いたときに 3D を自動で選ばない（app.js）・3 時間たっても自動で読み直さない（autoRefreshToken: false）。
+//     上限は Google Cloud の割り当て（1 日の回数）で止める
 import * as THREE from "three";
 import { TilesRenderer } from "3d-tiles-renderer";
 import { GoogleCloudAuthPlugin } from "3d-tiles-renderer/plugins";
@@ -61,7 +64,7 @@ export class GoogleTiles {
     this.viewer = viewer;
     this.onAttrib = onAttrib;
     const tiles = this.tiles = new TilesRenderer();
-    tiles.registerPlugin(new GoogleCloudAuthPlugin({ apiToken: key, autoRefreshToken: true }));
+    tiles.registerPlugin(new GoogleCloudAuthPlugin({ apiToken: key, autoRefreshToken: false }));
     tiles.group.matrixAutoUpdate = false;
     tiles.group.matrix.copy(ecefToThree(geo, viewer.origin));
     tiles.group.matrixWorldNeedsUpdate = true;
