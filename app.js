@@ -3,10 +3,10 @@
 //   IFC を組むのは tools/sheet_to_ifc.py（Pyodide で動かす。中身を作り直さない）
 //   保存 = TSV（前の版は _履歴 へ）・IFC・CSV をフォルダへ書く
 //   Web 版（projects.json があるとき）は見るだけで開き、パスワードで編集 → GitHub へコミット（web.js）
-import { Viewer } from "./viewer.js?v=20261006171450";
-import * as web from "./web.js?v=20261006171450";
-import * as geo from "./geo.js?v=20261006171450";
-import { buildOffline } from "./offline.js?v=20261006171450";
+import { Viewer } from "./viewer.js?v=20261006171803";
+import * as web from "./web.js?v=20261006171803";
+import * as geo from "./geo.js?v=20261006171803";
+import { buildOffline } from "./offline.js?v=20261006171803";
 
 const $ = (id) => document.getElementById(id);
 const IFC_NAME = "repairmodel.ifc";
@@ -445,7 +445,9 @@ function rowTr(r) {
   cb.onclick = (e) => { e.stopPropagation(); toggleRow(r.row, e.shiftKey, true); };
   td("").appendChild(cb);
   td("num", r.row);
-  td("name", r.name).title = r.name;
+  // ★まとめ（3D の 1 つの物）は先頭の行だけ出し、行の数を添える（fork だけ。2026-10-06）
+  const nMem = groupMembers(r.row).length;
+  td("name", nMem > 1 ? `${r.name}（${nMem} 行）` : r.name).title = nMem > 1 ? `${r.name} ほか（まとめ：${r.group}）` : r.name;
   td("", r.type);
   const st = td("stage" + (r.transp >= 1 ? " hidden" : ""));
   const chip = document.createElement("span");
@@ -545,7 +547,7 @@ function applyFilter() {
   for (const tr of $("tbody").children) {
     const r = rowsByNo.get(Number(tr.dataset.row));
     const text = (r.name + " " + r.memos.join(" ") + " " + r.group).toLowerCase();
-    tr.hidden = (q && !text.includes(q)) || (ft && r.type !== ft) || (fs && r.stage !== fs);
+    tr.hidden = groupMembers(r.row)[0] !== r.row || (q && !text.includes(q)) || (ft && r.type !== ft) || (fs && r.stage !== fs);
   }
 }
 $("q").oninput = applyFilter;
@@ -925,6 +927,9 @@ $("btnClear").onclick = () => {
 
 function applyChanges(changes) {
   if (!changes.length || !editable) return;
+  // 日付はまとめの行すべてに入れる（表の日付欄・カードから 1 行だけ入れても物の中で色がまだらにならない）
+  const seen = new Set();
+  changes = changes.flatMap(([n, i, v]) => groupMembers(n).map((m) => [m, i, v])).filter(([m, i]) => !seen.has(m + ":" + i) && seen.add(m + ":" + i));
   for (const c of changes) changedRows.add(c[0]);
   const res = JSON.parse(eng.set_steps(JSON.stringify(changes)));
   for (const r of res.rows) {
@@ -1119,7 +1124,7 @@ function askIonToken() {
 async function showG3d(on) {
   if (!on) { g3d?.setVisible(false); $("attrib3d").hidden = true; return; }
   if (!g3d) {
-    const T = await import("./tiles3d.js?v=20261006171450");
+    const T = await import("./tiles3d.js?v=20261006171803");
     const auth = g3dAuth() || (window.__ionOnce ? { ion: window.__ionOnce } : null);
     g3d = new T.GoogleTiles(viewer, geoInfo, auth, (t) => { $("attrib3dText").textContent = t; }, () => {
       status("3D の背景を読めませんでした。トークンが違うか、今月の回数を使い切った可能性があります。もう一度選ぶとトークンを聞きます");
