@@ -3,10 +3,10 @@
 //   IFC を組むのは tools/sheet_to_ifc.py（Pyodide で動かす。中身を作り直さない）
 //   保存 = TSV（前の版は _履歴 へ）・IFC・CSV をフォルダへ書く
 //   Web 版（projects.json があるとき）は見るだけで開き、パスワードで編集 → GitHub へコミット（web.js）
-import { Viewer } from "./viewer.js?v=20261006153009";
-import * as web from "./web.js?v=20261006153009";
-import * as geo from "./geo.js?v=20261006153009";
-import { buildOffline } from "./offline.js?v=20261006153009";
+import { Viewer } from "./viewer.js?v=20261006154449";
+import * as web from "./web.js?v=20261006154449";
+import * as geo from "./geo.js?v=20261006154449";
+import { buildOffline } from "./offline.js?v=20261006154449";
 
 const $ = (id) => document.getElementById(id);
 const IFC_NAME = "repairmodel.ifc";
@@ -1079,6 +1079,8 @@ async function setGeo(g) {
 // 地図タイルは選ばれたときに初めて読む（種類ごとに 81 枚）
 // ★3D（Google の 3D Tiles）は fork だけの機能（2026-10-06）。キーは projects.json の googleMapsKey か URL の ?gkey=
 let g3d = null;
+// 位置合わせを調べるときの入口（開発者ツールから window.__rs.viewer・__rs.g3d・__rs.geo）
+window.__rs = { viewer, get g3d() { return g3d; }, get geo() { return geoInfo; } };
 // ★トークンが設定に無ければ、選んだときに貼ってもらい、このブラウザに覚える（URL に長い文字列を手で入れると間違える。2026-10-06）
 const ION_KEY = "repairstage.ionToken";
 function g3dAuth() {
@@ -1100,7 +1102,7 @@ function askIonToken() {
 async function showG3d(on) {
   if (!on) { g3d?.setVisible(false); $("attrib3d").hidden = true; return; }
   if (!g3d) {
-    const T = await import("./tiles3d.js?v=20261006153009");
+    const T = await import("./tiles3d.js?v=20261006154449");
     const auth = g3dAuth() || (window.__ionOnce ? { ion: window.__ionOnce } : null);
     g3d = new T.GoogleTiles(viewer, geoInfo, auth, (t) => { $("attrib3dText").textContent = t; }, () => {
       status("3D の背景を読めませんでした。トークンが違うか、今月の回数を使い切った可能性があります。もう一度選ぶとトークンを聞きます");
