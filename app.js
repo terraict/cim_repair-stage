@@ -3,10 +3,10 @@
 //   IFC を組むのは tools/sheet_to_ifc.py（Pyodide で動かす。中身を作り直さない）
 //   保存 = TSV（前の版は _履歴 へ）・IFC・CSV をフォルダへ書く
 //   Web 版（projects.json があるとき）は見るだけで開き、パスワードで編集 → GitHub へコミット（web.js）
-import { Viewer } from "./viewer.js?v=20261006134147";
-import * as web from "./web.js?v=20261006134147";
-import * as geo from "./geo.js?v=20261006134147";
-import { buildOffline } from "./offline.js?v=20261006134147";
+import { Viewer } from "./viewer.js?v=20261006141018";
+import * as web from "./web.js?v=20261006141018";
+import * as geo from "./geo.js?v=20261006141018";
+import { buildOffline } from "./offline.js?v=20261006141018";
 
 const $ = (id) => document.getElementById(id);
 const IFC_NAME = "repairmodel.ifc";
@@ -1084,7 +1084,7 @@ function g3dKey() {
 async function showG3d(on) {
   if (!on) { g3d?.setVisible(false); $("attrib3d").hidden = true; return; }
   if (!g3d) {
-    const T = await import("./tiles3d.js");
+    const T = await import("./tiles3d.js?v=20261006141018");
     g3d = new T.GoogleTiles(viewer, geoInfo, g3dKey(), (t) => { $("attrib3dText").textContent = t; });
   }
   g3d.setVisible(true);
