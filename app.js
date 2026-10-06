@@ -3,10 +3,10 @@
 //   IFC を組むのは tools/sheet_to_ifc.py（Pyodide で動かす。中身を作り直さない）
 //   保存 = TSV（前の版は _履歴 へ）・IFC・CSV をフォルダへ書く
 //   Web 版（projects.json があるとき）は見るだけで開き、パスワードで編集 → GitHub へコミット（web.js）
-import { Viewer } from "./viewer.js?v=20261006143226";
-import * as web from "./web.js?v=20261006143226";
-import * as geo from "./geo.js?v=20261006143226";
-import { buildOffline } from "./offline.js?v=20261006143226";
+import { Viewer } from "./viewer.js?v=20261006151419";
+import * as web from "./web.js?v=20261006151419";
+import * as geo from "./geo.js?v=20261006151419";
+import { buildOffline } from "./offline.js?v=20261006151419";
 
 const $ = (id) => document.getElementById(id);
 const IFC_NAME = "repairmodel.ifc";
@@ -1079,14 +1079,18 @@ async function setGeo(g) {
 // 地図タイルは選ばれたときに初めて読む（種類ごとに 81 枚）
 // ★3D（Google の 3D Tiles）は fork だけの機能（2026-10-06）。キーは projects.json の googleMapsKey か URL の ?gkey=
 let g3d = null;
-function g3dKey() {
-  return new URLSearchParams(location.search).get("gkey") || project?.googleMapsKey || site?.googleMapsKey || "";
+function g3dAuth() {
+  const q = new URLSearchParams(location.search);
+  const google = q.get("gkey") || project?.googleMapsKey || site?.googleMapsKey || "";
+  const ion = q.get("ion") || project?.cesiumIonToken || site?.cesiumIonToken || "";
+  return google ? { google } : ion ? { ion } : null;
 }
+const g3dKey = () => !!g3dAuth();
 async function showG3d(on) {
   if (!on) { g3d?.setVisible(false); $("attrib3d").hidden = true; return; }
   if (!g3d) {
-    const T = await import("./tiles3d.js?v=20261006143226");
-    g3d = new T.GoogleTiles(viewer, geoInfo, g3dKey(), (t) => { $("attrib3dText").textContent = t; });
+    const T = await import("./tiles3d.js?v=20261006151419");
+    g3d = new T.GoogleTiles(viewer, geoInfo, g3dAuth(), (t) => { $("attrib3dText").textContent = t; });
   }
   g3d.setVisible(true);
   viewer.scene.background.set(0xbfd3e6);

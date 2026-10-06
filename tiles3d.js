@@ -3,12 +3,14 @@
 //   モデルの原点（A1 の端 × 中心線 × 起点の路面）の楕円体高 ＝ geo.z0（標高）＋ geo.geoid（ジオイド高）
 //   モデルの橋と重なる既存の橋は、geo.clip の箱（モデル座標 [x0, x1, y0, y1, z0, z1]）の中を消す
 //   キーは projects.json の googleMapsKey（使えるサイトを制限したキー）か、URL の ?gkey=
+//   ★Google のキーが無ければ Cesium ion 経由（projects.json の cesiumIonToken か ?ion=。資産 2275207 ＝ Google Photorealistic 3D Tiles）。
+//     ion の無料プラン（Community）は「商用の検討のための試用」まで。本番で使い続けるなら有料プランか Google のキーへ（2026-10-06）
 //   ★請求を出さない：Google が数えるのは読み始め（root tileset）1 回ごと（月 1,000 回まで無料）。
 //     ページを開いたときに 3D を自動で選ばない（app.js）・3 時間たっても自動で読み直さない（autoRefreshToken: false）。
 //     上限は Google Cloud の割り当て（1 日の回数）で止める
 import * as THREE from "three";
 import { TilesRenderer } from "3d-tiles-renderer";
-import { GoogleCloudAuthPlugin } from "3d-tiles-renderer/plugins";
+import { GoogleCloudAuthPlugin, CesiumIonAuthPlugin } from "3d-tiles-renderer/plugins";
 import * as G from "./geo.js";
 
 const A = 6378137.0, F = 1 / 298.257222101, E2 = F * (2 - F);
@@ -60,11 +62,14 @@ export function clipPlanes(viewer, box) {
 }
 
 export class GoogleTiles {
-  constructor(viewer, geo, key, onAttrib) {
+  // auth ＝ { google: キー } か { ion: トークン }
+  constructor(viewer, geo, auth, onAttrib) {
     this.viewer = viewer;
     this.onAttrib = onAttrib;
     const tiles = this.tiles = new TilesRenderer();
-    tiles.registerPlugin(new GoogleCloudAuthPlugin({ apiToken: key, autoRefreshToken: false }));
+    if (auth.google) tiles.registerPlugin(new GoogleCloudAuthPlugin({ apiToken: auth.google, autoRefreshToken: false }));
+    else tiles.registerPlugin(new CesiumIonAuthPlugin({ apiToken: auth.ion, assetId: "2275207", autoRefreshToken: false }));
+    this.via = auth.google ? "" : "Cesium ion 経由";
     tiles.group.matrixAutoUpdate = false;
     tiles.group.matrix.copy(ecefToThree(geo, viewer.origin));
     tiles.group.matrixWorldNeedsUpdate = true;
@@ -91,7 +96,7 @@ export class GoogleTiles {
         this.viewer.camera.updateMatrixWorld();
         this.tiles.setResolutionFromRenderer(this.viewer.camera, this.viewer.renderer);
         this.tiles.update();
-        const at = this.tiles.getAttributions().map((a) => a.type === "string" ? a.value : "").filter(Boolean).join(" ");
+        const at = [this.via, ...this.tiles.getAttributions().map((a) => a.type === "string" ? a.value : "")].filter(Boolean).join(" ");
         if (at !== this._last) { this._last = at; this.onAttrib?.(at); }
       }
       requestAnimationFrame(loop);
