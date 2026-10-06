@@ -104,7 +104,8 @@
   <h3>編集する</h3>
   <p>編集用のパスワードを入れてください。</p>
   <form id="fmLogin">
-    <input id="pw" type="password" autocomplete="current-password" placeholder="パスワード" required>
+    <input type="text" name="username" autocomplete="username" value="施工段階" hidden>
+    <input id="pw" type="password" autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="パスワード" required>
     <button class="primary">開く</button>
     <button type="button" id="btnLoginCancel">やめる</button>
   </form>

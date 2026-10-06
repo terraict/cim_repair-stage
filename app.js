@@ -3,10 +3,10 @@
 //   IFC を組むのは tools/sheet_to_ifc.py（Pyodide で動かす。中身を作り直さない）
 //   保存 = TSV（前の版は _履歴 へ）・IFC・CSV をフォルダへ書く
 //   Web 版（projects.json があるとき）は見るだけで開き、パスワードで編集 → GitHub へコミット（web.js）
-import { Viewer } from "./viewer.js?v=20261003195457";
-import * as web from "./web.js?v=20261003195457";
-import * as geo from "./geo.js?v=20261003195457";
-import { buildOffline } from "./offline.js?v=20261003195457";
+import { Viewer } from "./viewer.js?v=20261006134147";
+import * as web from "./web.js?v=20261006134147";
+import * as geo from "./geo.js?v=20261006134147";
+import { buildOffline } from "./offline.js?v=20261006134147";
 
 const $ = (id) => document.getElementById(id);
 const IFC_NAME = "repairmodel.ifc";
@@ -112,15 +112,28 @@ $("fmLogin").onsubmit = async (e) => {
   e.preventDefault();
   const msg = $("loginMsg");
   msg.textContent = "確かめています…";
+  const btn = $("fmLogin").querySelector("button.primary");
+  btn.disabled = true;     // スマホでは鍵を作るのに数秒かかる。二度押しで取り違えないように
   try {
     const auth = await web.loadAuth();
-    const token = await web.decryptToken(auth, $("pw").value);
+    if (!auth) throw new Error("編集の設定が読めません。電波の良い所で開き直してください");
+    // スマホでは日本語のキーボードで記号や数字が全角になったり、前後に空白が入ったりする。
+    // そのまま違えば、半角にそろえて空白を取ったもので試す（2026-10-06 スマホで通らなかった）
+    const raw = $("pw").value, alt = raw.normalize("NFKC").trim();
+    let token;
+    try { token = await web.decryptToken(auth, raw); }
+    catch (err) {
+      if (alt === raw) throw err;
+      token = await web.decryptToken(auth, alt);
+    }
     const r = new web.Repo(token, auth.owner, auth.repo, auth.branch);
     await r.check();
     await unlock(r);
     $("dlgLogin").close();
   } catch (err) {
     msg.textContent = err.message;
+  } finally {
+    btn.disabled = false;
   }
 };
 
